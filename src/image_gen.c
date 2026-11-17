@@ -8,7 +8,7 @@ static uint64_t hash_data(uint64_t h,const void *data,size_t n){
     const unsigned char *p=(const unsigned char*)data;
     for(size_t i=0;i<n;i++){h^=p[i];h*=UINT64_C(1099511628211);}return h;
 }
-void ama10_image_codebook_free(AMA10ImageCodebook *b){if(b){free(b->centers);free(b->residual_centers);memset(b,0,sizeof(*b));}}
+void ama10_image_codebook_free(AMA10ImageCodebook *b){if(b){free(b->centers);free(b->residual_centers);free(b->context_centers);memset(b,0,sizeof(*b));}}
 static int fit_centers(const float*x,size_t n,size_t d,uint32_t k,float*centers){
     if(!x||!centers||!n||!d||!k||k>n||d>SIZE_MAX/k||d*k>SIZE_MAX/sizeof(float))return 0;
     float*sums=(float*)calloc((size_t)k*d,sizeof(float));uint32_t*counts=(uint32_t*)calloc(k,sizeof(uint32_t));
@@ -54,9 +54,24 @@ int ama10_image_codebook_fit_residual(const float*x,size_t n,AMA10ImageCodebook*
     int ok=fit_centers(r,n,d,b->code_count,c);free(r);
     if(!ok){free(c);return 0;}b->residual_centers=c;b->levels=2;return 1;
 }
+int ama10_image_codebook_fit_context(const float*x,size_t n,uint32_t k,AMA10ImageCodebook*b){
+    if(!x||!n||!b||!b->centers||!k||k>n||b->context_centers||b->context_code_count||
+       n>SIZE_MAX/b->feature_width||n*b->feature_width>SIZE_MAX/sizeof(float)||
+       (size_t)k>SIZE_MAX/b->feature_width||
+       (size_t)k*b->feature_width>SIZE_MAX/sizeof(float))return 0;
+    float*c=(float*)malloc((size_t)k*b->feature_width*sizeof(float));if(!c)return 0;
+    if(!fit_centers(x,n,b->feature_width,k,c)){free(c);return 0;}
+    b->context_centers=c;b->context_code_count=k;return 1;
+}
 int ama10_image_codebook_quantize(const AMA10ImageCodebook *b,const float *x,uint32_t *code){
     if(!b||!b->centers||!x||!code)return 0;
     *code=quantize_centers(b->centers,b->feature_width,b->code_count,x)+1;return 1;
+}
+int ama10_image_context_quantize(const AMA10ImageCodebook*b,const float*x,uint32_t*code){
+    if(!b||!b->centers||!x||!code)return 0;
+    if(!b->context_code_count)return ama10_image_codebook_quantize(b,x,code);
+    if(!b->context_centers)return 0;
+    *code=quantize_centers(b->context_centers,b->feature_width,b->context_code_count,x)+1;return 1;
 }
 static int checksum(const AMA10ImageCodebook *b,uint64_t *out){
     uint64_t h=UINT64_C(14695981039346656037);h=hash_data(h,&b->patch_width,4);h=hash_data(h,&b->patch_height,4);
@@ -80,18 +95,33 @@ static int checksum_v3(const AMA10ImageCodebook*b,uint64_t*out){
     size_t n=(size_t)b->code_count*b->feature_width;if(n>SIZE_MAX/sizeof(float))return 0;
     h=hash_data(h,b->centers,n*sizeof(float));if(b->levels==2)h=hash_data(h,b->residual_centers,n*sizeof(float));*out=h;return 1;
 }
+static int checksum_v4(const AMA10ImageCodebook*b,uint64_t*out){
+    if(!b->context_code_count||!b->context_centers||b->context_code_count>256||
+       b->levels<1||b->levels>2||(b->levels==2&&!b->residual_centers)||
+       (b->levels==1&&b->residual_centers))return 0;
+    uint64_t h=UINT64_C(14695981039346656037);h=hash_data(h,&b->patch_width,4);h=hash_data(h,&b->patch_height,4);
+    h=hash_data(h,&b->stride_width,4);h=hash_data(h,&b->stride_height,4);h=hash_data(h,&b->levels,4);
+    h=hash_data(h,&b->code_count,4);h=hash_data(h,&b->feature_width,4);h=hash_data(h,&b->train_hash,8);
+    h=hash_data(h,&b->context_code_count,4);size_t n=(size_t)b->code_count*b->feature_width;
+    if(n>SIZE_MAX/sizeof(float)||(size_t)b->context_code_count>SIZE_MAX/b->feature_width||
+       (size_t)b->context_code_count*b->feature_width>SIZE_MAX/sizeof(float))return 0;
+    h=hash_data(h,b->centers,n*sizeof(float));if(b->levels==2)h=hash_data(h,b->residual_centers,n*sizeof(float));
+    h=hash_data(h,b->context_centers,(size_t)b->context_code_count*b->feature_width*sizeof(float));*out=h;return 1;
+}
 int ama10_image_codebook_save(const AMA10ImageCodebook *b,const char *path){
     if(!b||!b->centers||!path||!b->stride_width||!b->stride_height||
        b->stride_width>b->patch_width||b->stride_height>b->patch_height)return 0;
-    uint64_t sum;if(!checksum_v3(b,&sum))return 0;
+    uint64_t sum;int v4=b->context_code_count!=0;if(v4?!checksum_v4(b,&sum):!checksum_v3(b,&sum))return 0;
     FILE *f=fopen(path,"wb");if(!f)return 0;
-    const unsigned char magic[8]={'A','1','0','I','M','G','0','3'};
+    const unsigned char magic3[8]={'A','1','0','I','M','G','0','3'},magic4[8]={'A','1','0','I','M','G','0','4'};const unsigned char*magic=v4?magic4:magic3;
     int ok=fwrite(magic,1,8,f)==8&&fwrite(&b->patch_width,4,1,f)==1&&fwrite(&b->patch_height,4,1,f)==1&&
       fwrite(&b->stride_width,4,1,f)==1&&fwrite(&b->stride_height,4,1,f)==1&&
       fwrite(&b->levels,4,1,f)==1&&
-      fwrite(&b->code_count,4,1,f)==1&&fwrite(&b->feature_width,4,1,f)==1&&fwrite(&b->train_hash,8,1,f)==1&&fwrite(&sum,8,1,f)==1&&
+      fwrite(&b->code_count,4,1,f)==1&&fwrite(&b->feature_width,4,1,f)==1&&fwrite(&b->train_hash,8,1,f)==1&&
+      (!v4||fwrite(&b->context_code_count,4,1,f)==1)&&fwrite(&sum,8,1,f)==1&&
       fwrite(b->centers,sizeof(float),(size_t)b->code_count*b->feature_width,f)==(size_t)b->code_count*b->feature_width&&
-      (b->levels==1||fwrite(b->residual_centers,sizeof(float),(size_t)b->code_count*b->feature_width,f)==(size_t)b->code_count*b->feature_width);
+      (b->levels==1||fwrite(b->residual_centers,sizeof(float),(size_t)b->code_count*b->feature_width,f)==(size_t)b->code_count*b->feature_width)&&
+      (!v4||fwrite(b->context_centers,sizeof(float),(size_t)b->context_code_count*b->feature_width,f)==(size_t)b->context_code_count*b->feature_width);
     if(fclose(f)!=0)ok=0;
     return ok;
 }
@@ -99,24 +129,26 @@ int ama10_image_codebook_load(AMA10ImageCodebook *out,const char *path){
     if(!out||out->centers||!path)return 0;
     FILE *f=fopen(path,"rb");if(!f)return 0;
     AMA10ImageCodebook b={0};
-    unsigned char magic[8],expected1[8]={'A','1','0','I','M','G','0','1'},expected2[8]={'A','1','0','I','M','G','0','2'},expected3[8]={'A','1','0','I','M','G','0','3'};uint64_t sum=0;int ok=fread(magic,1,8,f)==8&&
-      (!memcmp(magic,expected1,8)||!memcmp(magic,expected2,8)||!memcmp(magic,expected3,8))&&
+    unsigned char magic[8],expected1[8]={'A','1','0','I','M','G','0','1'},expected2[8]={'A','1','0','I','M','G','0','2'},expected3[8]={'A','1','0','I','M','G','0','3'},expected4[8]={'A','1','0','I','M','G','0','4'};uint64_t sum=0;int ok=fread(magic,1,8,f)==8&&
+      (!memcmp(magic,expected1,8)||!memcmp(magic,expected2,8)||!memcmp(magic,expected3,8)||!memcmp(magic,expected4,8))&&
       fread(&b.patch_width,4,1,f)==1&&fread(&b.patch_height,4,1,f)==1;
-    if(ok&&(!memcmp(magic,expected2,8)||!memcmp(magic,expected3,8)))ok=fread(&b.stride_width,4,1,f)==1&&fread(&b.stride_height,4,1,f)==1;
+    if(ok&&(!memcmp(magic,expected2,8)||!memcmp(magic,expected3,8)||!memcmp(magic,expected4,8)))ok=fread(&b.stride_width,4,1,f)==1&&fread(&b.stride_height,4,1,f)==1;
     else if(ok)b.stride_width=b.patch_width,b.stride_height=b.patch_height;
-    if(ok&&!memcmp(magic,expected3,8))ok=fread(&b.levels,4,1,f)==1;
+    if(ok&&(!memcmp(magic,expected3,8)||!memcmp(magic,expected4,8)))ok=fread(&b.levels,4,1,f)==1;
     else if(ok)b.levels=1;
     ok=ok&&fread(&b.code_count,4,1,f)==1&&fread(&b.feature_width,4,1,f)==1&&
-      fread(&b.train_hash,8,1,f)==1&&fread(&sum,8,1,f)==1&&b.patch_width&&b.patch_height&&b.code_count&&b.feature_width==b.patch_width*b.patch_height*3&&
+      fread(&b.train_hash,8,1,f)==1&&(!memcmp(magic,expected4,8)?fread(&b.context_code_count,4,1,f)==1:1)&&fread(&sum,8,1,f)==1&&b.patch_width&&b.patch_height&&b.code_count&&b.feature_width==b.patch_width*b.patch_height*3&&
       b.code_count<=256&&b.feature_width<=4096&&b.levels>=1&&b.levels<=2&&b.stride_width&&b.stride_height&&
-      b.stride_width<=b.patch_width&&b.stride_height<=b.patch_height;
+      b.stride_width<=b.patch_width&&b.stride_height<=b.patch_height&&b.context_code_count<=256&&
+      (!memcmp(magic,expected4,8)?b.context_code_count>0:b.context_code_count==0);
     if(ok&&(b.patch_width>64||b.patch_height>64||b.feature_width!=(uint64_t)b.patch_width*b.patch_height*3))ok=0;
     if(ok){size_t n=(size_t)b.code_count*b.feature_width;b.centers=(float*)malloc(n*sizeof(float));if(!b.centers)ok=0;else if(fread(b.centers,sizeof(float),n,f)!=n)ok=0;
-        if(ok&&b.levels==2){b.residual_centers=(float*)malloc(n*sizeof(float));if(!b.residual_centers||fread(b.residual_centers,sizeof(float),n,f)!=n)ok=0;}}
+        if(ok&&b.levels==2){b.residual_centers=(float*)malloc(n*sizeof(float));if(!b.residual_centers||fread(b.residual_centers,sizeof(float),n,f)!=n)ok=0;}
+        if(ok&&b.context_code_count){size_t cn=(size_t)b.context_code_count*b.feature_width;b.context_centers=(float*)malloc(cn*sizeof(float));if(!b.context_centers||fread(b.context_centers,sizeof(float),cn,f)!=cn)ok=0;}}
     if(fgetc(f)!=EOF)ok=0;
     if(fclose(f)!=0)ok=0;
     uint64_t actual=0;if(ok){int valid=!memcmp(magic,expected1,8)?checksum_v1(&b,&actual):
-        !memcmp(magic,expected2,8)?checksum(&b,&actual):checksum_v3(&b,&actual);ok=valid&&actual==sum;}
+        !memcmp(magic,expected2,8)?checksum(&b,&actual):!memcmp(magic,expected3,8)?checksum_v3(&b,&actual):checksum_v4(&b,&actual);ok=valid&&actual==sum;}
     if(ok)*out=b;else ama10_image_codebook_free(&b);return ok;
 }
 int ama10_image_encode_codes(const AMA10Image *im,const AMA10ImageCodebook *b,uint32_t **out,size_t *n){

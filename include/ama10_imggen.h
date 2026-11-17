@@ -7,9 +7,9 @@
 
 typedef struct {
     uint32_t patch_width, patch_height, stride_width, stride_height;
-    uint32_t code_count, feature_width, levels;
+    uint32_t code_count, feature_width, levels, context_code_count;
     uint64_t train_hash;
-    float *centers, *residual_centers;
+    float *centers, *residual_centers, *context_centers;
 } AMA10ImageCodebook;
 
 void ama10_image_codebook_free(AMA10ImageCodebook *book);
@@ -20,10 +20,16 @@ int ama10_image_codebook_fit(const float *patches, size_t patch_count,
 /* Add a second nearest-centroid stage fitted to the first-stage residuals. */
 int ama10_image_codebook_fit_residual(const float *patches,size_t patch_count,
                                       AMA10ImageCodebook *book);
+/* Fit a separate train-only codebook for global and quadrant context patches. */
+int ama10_image_codebook_fit_context(const float *patches,size_t patch_count,
+                                     uint32_t context_code_count,
+                                     AMA10ImageCodebook *book);
 int ama10_image_codebook_save(const AMA10ImageCodebook *book, const char *path);
 int ama10_image_codebook_load(AMA10ImageCodebook *book, const char *path);
 int ama10_image_codebook_quantize(const AMA10ImageCodebook *book,
                                   const float *patch, uint32_t *code);
+int ama10_image_context_quantize(const AMA10ImageCodebook *book,
+                                 const float *patch,uint32_t *code);
 int ama10_image_encode_codes(const AMA10Image *image,
                              const AMA10ImageCodebook *book,
                              uint32_t **codes, size_t *code_count);

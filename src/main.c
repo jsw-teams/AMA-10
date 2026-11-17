@@ -117,6 +117,54 @@ static int read_tokenizer_sample(const char *path,uint64_t file_bytes,uint64_t l
     if(!ok){free(p);return 0;}
     *data=p;*size=n;return 1;
 }
+static int build_validation_prompt(const char *path,uint64_t file_bytes,
+                                   const AMA10Tokenizer *tokenizer,uint32_t ids[64],
+                                   size_t *token_count,uint64_t *byte_offset,
+                                   unsigned char **prompt_bytes,size_t *prompt_length){
+    if(!path||!tokenizer||!ids||!token_count||!byte_offset||!prompt_bytes||!prompt_length||file_bytes<2)return 0;
+    *token_count=0;*prompt_bytes=NULL;*prompt_length=0;
+    FILE *f=fopen(path,"rb");if(!f){perror(path);return 0;}
+    uint64_t offset=file_bytes/2u;int ok=seek_file64(f,offset);
+    if(ok&&offset){int c;
+        while((c=fgetc(f))!=EOF&&c!='\n'){}
+        if(c==EOF)ok=0;
+    }
+    if(ok){
+        long long current;
+#ifdef _WIN32
+        current=_ftelli64(f);
+#else
+        current=(long long)ftello(f);
+#endif
+        if(current<0)ok=0;else offset=(uint64_t)current;
+    }
+    size_t cap=65536u;unsigned char *line=ok?(unsigned char*)malloc(cap):NULL;
+    if(ok&&!line)ok=0;
+    size_t length=0,begin=0;uint64_t line_offset=offset;
+    while(ok){
+        long long current;
+#ifdef _WIN32
+        current=_ftelli64(f);
+#else
+        current=(long long)ftello(f);
+#endif
+        if(current<0){ok=0;break;}line_offset=(uint64_t)current;length=0;
+        while(length<cap){int c=fgetc(f);if(c==EOF||c=='\n')break;line[length++]=(unsigned char)c;}
+        if(ferror(f)){ok=0;break;}
+        if(length&&line[length-1]=='\r')length--;
+        begin=0;while(begin<length&&(line[begin]==' '||line[begin]=='\t'||line[begin]=='\r'))begin++;
+        if(begin<length)break;
+        if(feof(f)){ok=0;break;}
+    }
+    uint32_t *encoded=NULL;size_t encoded_count=0;
+    if(ok&&(begin==length||!ama10_tokenizer_encode(tokenizer,line+begin,length-begin,&encoded,&encoded_count)||!encoded_count))ok=0;
+    if(ok){*token_count=encoded_count<64?encoded_count:64;memcpy(ids,encoded,*token_count*sizeof(uint32_t));
+        ok=ama10_tokenizer_decode(tokenizer,ids,*token_count,prompt_bytes,prompt_length);}
+    if(ok)*byte_offset=line_offset+begin;
+    free(encoded);free(line);if(fclose(f)!=0)ok=0;
+    if(!ok){free(*prompt_bytes);*prompt_bytes=NULL;*prompt_length=0;*token_count=0;return 0;}
+    return 1;
+}
 static int eval_dataset_region(const AMA10Model *m,AMA10TokenDataset *dataset,
                                size_t count,double *loss){
     if(!count||count==SIZE_MAX)return 0;
@@ -376,15 +424,23 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
         int tok_saved=ama10_tokenizer_save(&tokenizer,tok_path);free(tok_path);
         if(!tok_saved){fprintf(stderr,"tokenizer sidecar save failed\n");goto fail;}
     }
-    /* Greedy continuation from a real training prefix, then decode through byte fallback. */
+    /* Greedy continuation from a fixed held-out validation prefix for comparable runs. */
     {
         const char *gen_path="build/generated.bin";FILE *g=fopen(gen_path,"wb");
         float *logits=(float*)malloc(tokenizer.vocabulary_size*sizeof(float));
         if(g&&logits){
             ama10_state_reset(&state);
-            size_t prompt=train_tokens<64?(size_t)train_tokens:64;int prompt_ok=1;
+            size_t prompt=0;uint64_t prompt_start=0;
             uint32_t prompt_ids[64];
-            if(!ama10_token_dataset_read(&train_dataset,train_tokens-prompt,prompt,prompt_ids))prompt_ok=0;
+            unsigned char *prompt_bytes=NULL;size_t prompt_byte_count=0;
+            int prompt_ok=build_validation_prompt(validation_path,nval,&tokenizer,prompt_ids,
+                                                   &prompt,&prompt_start,&prompt_bytes,&prompt_byte_count);
+            if(prompt_ok){
+                FILE *prompt_file=fopen("build/generation_prompt.bin","wb");
+                if(!prompt_file||fwrite(prompt_bytes,1,prompt_byte_count,prompt_file)!=prompt_byte_count)prompt_ok=0;
+                if(prompt_file&&fclose(prompt_file)!=0)prompt_ok=0;
+            }
+            free(prompt_bytes);
             for(size_t j=0;j<prompt&&prompt_ok;j++)
                 if(!ama10_step(&m,&state,prompt_ids[j],logits,2,2.0f)){prompt_ok=0;break;}
             generated_ids=(uint32_t*)malloc(128*sizeof(uint32_t));
@@ -410,6 +466,8 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
             if(prompt_ok)print_generation_metrics(&tokenizer,generated_ids,generated_count,
                                                   generated_bytes,generated_len);
             fclose(g);
+            if(prompt_ok)printf("generation_prompt_source=validation byte_offset=%llu prompt_tokens=%zu prompt_bytes=%zu\n",
+                                (unsigned long long)prompt_start,prompt,prompt_byte_count);
             if(prompt_ok)printf("greedy_tokens=%zu generated_bytes=%zu generation_file=%s\n",generated_count,generated_len,gen_path);
             else fprintf(stderr,"generation output failed\n");
         } else {if(g)fclose(g);fprintf(stderr,"generation output unavailable\n");}

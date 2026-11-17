@@ -130,6 +130,13 @@ int ama10_train_multimodal_sequence(AMA10Model *m,AMA10Optimizer *opt,AMA10State
                                     const uint32_t *targets,size_t length,unsigned depth,
                                     float learning_rate,float weight_decay,
                                     float *feature_gradients,float *mean_loss);
+/* Mixed token/modality TBPTT pass that sums parameter gradients without an update. */
+int ama10_train_multimodal_accumulate(AMA10Model *m,AMA10Optimizer *opt,AMA10State *state,
+                                    const uint32_t *token_inputs,const float *feature_inputs,
+                                    const unsigned char *feature_mask,const unsigned char *loss_mask,
+                                    const uint32_t *targets,size_t length,unsigned depth,
+                                    AMA10Gradients *gradients,float *feature_gradients,
+                                    float *mean_loss);
 /* Train against a normalized soft target distribution at each supervised step.
    This supports sequence criteria (for example CTC forward-backward) that produce
    posterior targets. soft_targets is length x vocabulary, row-major. */

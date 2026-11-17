@@ -246,6 +246,33 @@ int main(void){
         ama10_model_free(&direct);ama10_model_free(&accumulated);
     }
     {
+        AMA10Model direct={0},accumulated={0};AMA10Optimizer direct_opt={0},accumulated_opt={0};
+        AMA10State direct_state={0},accumulated_state={0};AMA10Gradients gradients={0};
+        const uint32_t inputs[]={0,1,2,3},targets[]={1,2,3,4};
+        const unsigned char feature_mask[]={0,1,0,0},loss_mask[]={1,1,0,1};
+        float features[16]={0},direct_feature_gradients[16]={0},accumulated_feature_gradients[16]={0};
+        float direct_loss=0,accumulated_loss=0;features[4]=0.25f;features[5]=-0.5f;features[6]=0.75f;features[7]=0.125f;
+        if(!ama10_model_init(&direct,5,4,4,812)||!ama10_model_init(&accumulated,5,4,4,812)||
+           !ama10_optimizer_init(&direct_opt,&direct)||!ama10_optimizer_init(&accumulated_opt,&accumulated)||
+           !ama10_state_init(&direct_state,4)||!ama10_state_init(&accumulated_state,4)||
+           !ama10_gradients_init(&gradients,&accumulated))return 46;
+        if(!ama10_train_multimodal_sequence(&direct,&direct_opt,&direct_state,inputs,features,
+                    feature_mask,loss_mask,targets,4,2,0.001f,0.0f,
+                    direct_feature_gradients,&direct_loss)||
+           !ama10_train_multimodal_accumulate(&accumulated,&accumulated_opt,&accumulated_state,
+                    inputs,features,feature_mask,loss_mask,targets,4,2,&gradients,
+                    accumulated_feature_gradients,&accumulated_loss))return 47;
+        if(gradients.tokens!=3||accumulated_opt.step!=0||direct_loss!=accumulated_loss||
+           memcmp(direct_feature_gradients,accumulated_feature_gradients,sizeof(direct_feature_gradients))||
+           !ama10_optimizer_apply(&accumulated,&accumulated_opt,&gradients,0.001f,0.0f)||
+           !same_model_parameters(&direct,&accumulated)){
+            fprintf(stderr,"mixed token/feature gradient accumulation differs from direct update\n");return 48;
+        }
+        ama10_gradients_free(&gradients);ama10_state_free(&direct_state);ama10_state_free(&accumulated_state);
+        ama10_optimizer_free(&direct_opt);ama10_optimizer_free(&accumulated_opt);
+        ama10_model_free(&direct);ama10_model_free(&accumulated);
+    }
+    {
         AMA10Model depth_model={0};AMA10State depth_one={0},depth_four={0};float logits_one[2],logits_four[2];
         if(!ama10_model_init(&depth_model,2,1,1,71)||!ama10_state_init(&depth_one,1)||
            !ama10_state_init(&depth_four,1))return 30;

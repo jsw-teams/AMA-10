@@ -914,6 +914,17 @@ int ama10_train_multimodal_sequence(AMA10Model *m,AMA10Optimizer *opt,AMA10State
                                    targets,NULL,length,depth,-1.0f,lr,wd,NULL,feature_gradients,
                                    mean_loss,NULL,NULL);
 }
+int ama10_train_multimodal_accumulate(AMA10Model *m,AMA10Optimizer *opt,AMA10State *state,
+                                    const uint32_t *token_inputs,const float *feature_inputs,
+                                    const unsigned char *feature_mask,const unsigned char *loss_mask,
+                                    const uint32_t *targets,size_t length,unsigned depth,
+                                    AMA10Gradients *gradients,float *feature_gradients,
+                                    float *mean_loss){
+    if(!gradients||!feature_gradients)return 0;
+    return train_sequence_internal(m,opt,state,token_inputs,feature_inputs,feature_mask,loss_mask,
+                                   targets,NULL,length,depth,-1.0f,0.0f,0.0f,gradients,
+                                   feature_gradients,mean_loss,NULL,NULL);
+}
 int ama10_train_soft_multimodal_sequence(AMA10Model *m,AMA10Optimizer *opt,AMA10State *state,
                                     const uint32_t *token_inputs,const float *feature_inputs,
                                     const unsigned char *feature_mask,const unsigned char *loss_mask,

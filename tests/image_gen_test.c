@@ -5,9 +5,9 @@
 
 int main(int argc,char**argv){if(argc!=2)return 2;float *patches=(float*)malloc(2*192*sizeof(float));if(!patches)return 1;
  for(size_t p=0;p<2;p++)for(size_t i=0;i<192;i++)patches[p*192+i]=(float)p;
- AMA10ImageCodebook b={0},loaded={0};int ok=ama10_image_codebook_fit(patches,2,192,2,8,8,1234,&b);free(patches);if(!ok)return 1;
+ AMA10ImageCodebook b={0},loaded={0};int ok=ama10_image_codebook_fit(patches,2,192,2,8,8,1234,&b);if(ok)ok=ama10_image_codebook_fit_context(patches,2,2,&b);free(patches);if(!ok)return 1;
  char bookpath[1024],impath[1024];snprintf(bookpath,sizeof(bookpath),"%s/image-gen-test.vq",argv[1]);snprintf(impath,sizeof(impath),"%s/image-gen-test.ppm",argv[1]);
- ok=ama10_image_codebook_save(&b,bookpath)&&ama10_image_codebook_load(&loaded,bookpath)&&loaded.train_hash==1234&&loaded.code_count==2;
+ uint32_t context_code=0;ok=ama10_image_codebook_save(&b,bookpath)&&ama10_image_codebook_load(&loaded,bookpath)&&loaded.train_hash==1234&&loaded.code_count==2&&loaded.context_code_count==2&&loaded.context_centers&&ama10_image_context_quantize(&loaded,loaded.context_centers,&context_code)&&context_code>=1&&context_code<=2;
  AMA10Image input={64,64,(unsigned char*)malloc(64*64*3)},decoded={0},readback={0};if(!input.rgb)ok=0;
  if(input.rgb)for(size_t y=0;y<64;y++)for(size_t x=0;x<64;x++){size_t p=(y*64+x)*3;unsigned char value=(unsigned char)(x<32?25:225);input.rgb[p]=value;input.rgb[p+1]=value;input.rgb[p+2]=value;}
  uint32_t *codes=NULL;size_t count=0;if(ok)ok=ama10_image_encode_codes(&input,&loaded,&codes,&count)&&count==64&&ama10_image_decode_codes(&loaded,codes,count,&decoded)&&ama10_image_save_ppm(&decoded,impath)&&ama10_image_load_ppm(&readback,impath)&&readback.width==64&&readback.height==64;
