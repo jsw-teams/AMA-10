@@ -73,6 +73,23 @@ int ama10_image_context_quantize(const AMA10ImageCodebook*b,const float*x,uint32
     if(!b->context_centers)return 0;
     *code=quantize_centers(b->context_centers,b->feature_width,b->context_code_count,x)+1;return 1;
 }
+static void append_spatial_neighbor(size_t position,size_t candidate,size_t neighbors[8],size_t*count){
+    if(candidate>=position||*count>=8)return;
+    for(size_t i=0;i<*count;i++)if(neighbors[i]==candidate)return;
+    neighbors[(*count)++]=candidate;
+}
+size_t ama10_image_spatial_neighbors(size_t position,size_t grid_width,size_t grid_height,size_t neighbors[8]){
+    if(!grid_width||!grid_height||!neighbors||grid_width>SIZE_MAX/grid_height||position>=grid_width*grid_height)return 0;
+    size_t count=0,x=position%grid_width,y=position/grid_width;
+    if(y>=2)append_spatial_neighbor(position,position-2*grid_width,neighbors,&count);
+    if(y>=1){
+        size_t row=y-1,begin=x>2?x-2:0,end=grid_width-1-x<2?grid_width-1:x+2;
+        for(size_t nx=begin;nx<=end;nx++)append_spatial_neighbor(position,row*grid_width+nx,neighbors,&count);
+    }
+    if(x)append_spatial_neighbor(position,position-1,neighbors,&count);
+    if(x>=2)append_spatial_neighbor(position,position-2,neighbors,&count);
+    return count;
+}
 static int checksum(const AMA10ImageCodebook *b,uint64_t *out){
     uint64_t h=UINT64_C(14695981039346656037);h=hash_data(h,&b->patch_width,4);h=hash_data(h,&b->patch_height,4);
     h=hash_data(h,&b->stride_width,4);h=hash_data(h,&b->stride_height,4);

@@ -30,6 +30,9 @@ int ama10_image_codebook_quantize(const AMA10ImageCodebook *book,
                                   const float *patch, uint32_t *code);
 int ama10_image_context_quantize(const AMA10ImageCodebook *book,
                                  const float *patch,uint32_t *code);
+/* Previous raster patches used as position-tagged 2D neighborhood context. */
+size_t ama10_image_spatial_neighbors(size_t position,size_t grid_width,size_t grid_height,
+                                     size_t neighbors[8]);
 int ama10_image_encode_codes(const AMA10Image *image,
                              const AMA10ImageCodebook *book,
                              uint32_t **codes, size_t *code_count);

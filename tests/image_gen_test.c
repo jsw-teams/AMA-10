@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-int main(int argc,char**argv){if(argc!=2)return 2;float *patches=(float*)malloc(2*192*sizeof(float));if(!patches)return 1;
+int main(int argc,char**argv){if(argc!=2)return 2;size_t neighbors[8],neighbor_count=ama10_image_spatial_neighbors(12,5,5,neighbors);if(neighbor_count!=8)return 1;for(size_t i=0;i<neighbor_count;i++){if(neighbors[i]>=12)return 1;for(size_t j=0;j<i;j++)if(neighbors[i]==neighbors[j])return 1;}neighbor_count=ama10_image_spatial_neighbors(134,90,53,neighbors);if(neighbor_count!=7)return 1;for(size_t i=0;i<neighbor_count;i++)if(neighbors[i]>=134)return 1;if(ama10_image_spatial_neighbors(0,0,1,neighbors)!=0)return 1;float *patches=(float*)malloc(2*192*sizeof(float));if(!patches)return 1;
  for(size_t p=0;p<2;p++)for(size_t i=0;i<192;i++)patches[p*192+i]=(float)p;
  AMA10ImageCodebook b={0},loaded={0};int ok=ama10_image_codebook_fit(patches,2,192,2,8,8,1234,&b);if(ok)ok=ama10_image_codebook_fit_context(patches,2,2,&b);free(patches);if(!ok)return 1;
  char bookpath[1024],impath[1024];snprintf(bookpath,sizeof(bookpath),"%s/image-gen-test.vq",argv[1]);snprintf(impath,sizeof(impath),"%s/image-gen-test.ppm",argv[1]);
@@ -54,4 +54,4 @@ int main(int argc,char**argv){if(argc!=2)return 2;float *patches=(float*)malloc(
   ama10_image_codebook_free(&base);ama10_image_codebook_free(&rq);ama10_image_codebook_free(&loaded_rq);
   if(!rq_ok||!(mse_rq<mse_base)){fprintf(stderr,"residual VQ did not improve patch reconstruction: base=%g residual=%g\n",mse_base,mse_rq);return 1;}
  }
- if(!ok){fprintf(stderr,"image codebook, residual quantization, serialization, metrics, or PPM round trip failed\n");return 1;}puts("image VQ/RQ fitting, serialization, variable-resolution grids, 1080x640 decode, metrics, and PPM roundtrip: ok");return 0;}
+ if(!ok){fprintf(stderr,"image codebook, residual quantization, serialization, metrics, or PPM round trip failed\n");return 1;}puts("image VQ/RQ fitting, serialization, 2D spatial neighbors, variable-resolution grids, 1080x640 decode, metrics, and PPM roundtrip: ok");return 0;}
