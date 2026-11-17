@@ -1,0 +1,82 @@
+[
+  {
+    "title": "Recurrent neural network",
+    "pageid": 1706303,
+    "revision": 1383645247,
+    "url": "https://en.wikipedia.org/wiki/Recurrent_neural_network",
+    "retrieval_utc": "2026-11-16T14:01:34.5448526Z",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "split": "train"
+  },
+  {
+    "title": "Language model",
+    "pageid": 1911810,
+    "revision": 1385623694,
+    "url": "https://en.wikipedia.org/wiki/Language_model",
+    "retrieval_utc": "2026-11-16T14:01:37.0551744Z",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "split": "train"
+  },
+  {
+    "title": "Natural language processing",
+    "pageid": 21652,
+    "revision": 1383133655,
+    "url": "https://en.wikipedia.org/wiki/Natural_language_processing",
+    "retrieval_utc": "2026-11-16T14:01:38.6074688Z",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "split": "train"
+  },
+  {
+    "title": "UTF-8",
+    "pageid": 32188,
+    "revision": 1383629017,
+    "url": "https://en.wikipedia.org/wiki/UTF-8",
+    "retrieval_utc": "2026-11-16T14:01:39.9629941Z",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "split": "train"
+  },
+  {
+    "title": "C (programming language)",
+    "pageid": 6021,
+    "revision": 1385839600,
+    "url": "https://en.wikipedia.org/wiki/C_(programming_language)",
+    "retrieval_utc": "2026-11-16T14:01:41.7780124Z",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "split": "train"
+  },
+  {
+    "title": "OpenCL",
+    "pageid": 17861917,
+    "revision": 1385419997,
+    "url": "https://en.wikipedia.org/wiki/OpenCL",
+    "retrieval_utc": "2026-11-16T14:02:04.0439956Z",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "split": "train"
+  },
+  {
+    "title": "Gradient descent",
+    "pageid": 201489,
+    "revision": 1373673523,
+    "url": "https://en.wikipedia.org/wiki/Gradient_descent",
+    "retrieval_utc": "2026-11-16T14:02:05.4288802Z",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "split": "validation"
+  },
+  {
+    "title": "Machine learning",
+    "pageid": 233488,
+    "revision": 1384336237,
+    "url": "https://en.wikipedia.org/wiki/Machine_learning",
+    "retrieval_utc": "2026-11-16T14:02:07.6296957Z",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "split": "validation"
+  }
+]

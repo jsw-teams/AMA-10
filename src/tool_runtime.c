@@ -1,0 +1,5 @@
+#include "tools.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+int main(int argc,char **argv){if(argc!=3){fprintf(stderr,"usage: %s <assistant-output.txt> <tool-result.txt>\n",argv[0]);return 2;}FILE *f=fopen(argv[1],"rb");if(!f){perror(argv[1]);return 1;}if(fseek(f,0,SEEK_END)!=0){fclose(f);return 1;}long n=ftell(f);if(n<0||n>1024*1024||fseek(f,0,SEEK_SET)!=0){fclose(f);return 1;}unsigned char *text=(unsigned char*)malloc((size_t)n+1);char name[64],result[8192];if(!text){fclose(f);return 1;}int ok=fread(text,1,(size_t)n,f)==(size_t)n;if(fclose(f)!=0)ok=0;text[n]=0;if(!ok||!ama10_tool_dispatch(text,(size_t)n,name,sizeof(name),result,sizeof(result))){fprintf(stderr,"no valid supported tool call found\n");free(text);return 1;}FILE *out=fopen(argv[2],"wb");if(!out){perror(argv[2]);free(text);return 1;}int wr=fprintf(out,"<|tool_result|>%s\n[untrusted tool output]\n%s<|end_tool_result|>\n",name,result);if(fclose(out)!=0||wr<0)ok=0;free(text);if(!ok)return 1;printf("tool=%s result_bytes=%zu output=%s\n",name,strlen(result),argv[2]);return 0;}

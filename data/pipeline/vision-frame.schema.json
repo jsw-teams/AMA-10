@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ama10.local/pipeline/vision-frame.schema.json",
+  "title": "AMA-10 vision frame manifest record",
+  "type": "object",
+  "required": ["dataset_id", "sequence_id", "frame_index", "timestamp_ns", "camera_id", "image_path", "width", "height", "split"],
+  "properties": {
+    "dataset_id": {"type": "string", "minLength": 1},
+    "source_revision": {"type": "string", "minLength": 1},
+    "sequence_id": {"type": "string", "minLength": 1},
+    "frame_index": {"type": "integer", "minimum": 0},
+    "timestamp_ns": {"type": "integer", "minimum": 0},
+    "camera_id": {"type": "string", "minLength": 1},
+    "image_path": {"type": "string", "minLength": 1},
+    "image_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "width": {"type": "integer", "minimum": 1},
+    "height": {"type": "integer", "minimum": 1},
+    "calibration_path": {"type": ["string", "null"]},
+    "annotations_path": {"type": ["string", "null"]},
+    "ego_pose_path": {"type": ["string", "null"]},
+    "weather": {"type": ["string", "null"]},
+    "lighting": {"type": ["string", "null"]},
+    "split": {"enum": ["train", "validation", "test"]}
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,8 @@
+/build/
+/data/cache/
+/data/processed/
+/checkpoints/
+/api.key
+*.safetensors
+*.bin
+*.exe

@@ -1,0 +1,70 @@
+Recurrent neural network
+In artificial neural networks, recurrent neural networks (RNNs) are designed for processing sequential data, such as text, speech, and time series, where the order of elements is important. Unlike feedforward neural networks, which process inputs independently, RNNs utilize recurrent connections, where the output of a neuron at one time step is fed back as input to the network at the next time step. This enables RNNs to capture temporal dependencies and patterns within sequences.
+The fundamental building block of RNN is the recurrent unit, which maintains a hidden state—a form of memory that is updated at each time step based on the current input and the previous hidden state. This feedback mechanism allows the network to learn from past inputs and incorporate that knowledge into its current processing. RNNs have been successfully applied to tasks such as unsegmented, connected handwriting recognition, speech recognition, natural language processing, and neural machine translation.
+However, traditional RNNs suffer from the vanishing gradient problem, which limits their ability to learn long-range dependencies. This issue was addressed by the development of the long short-term memory...
+
+Language model
+A language model is a computational model that predicts sequences in natural language. Language models are useful for a variety of tasks, including speech recognition, machine translation, natural language generation (generating more human-like text), optical character recognition, route optimization, handwriting recognition, grammar induction, information retrieval and disaster response.
+Large language models (LLMs) are currently based on large transformers trained on large datasets (using texts scraped from the public internet, as well as any and all other text that can be obtained legally or illegally). They have superseded recurrent neural network-based models, which had previously superseded the purely statistical models, such as the word n-gram language model.
+
+
+== History ==
+During the 1950s, Noam Chomsky developed influential formal approaches to describing language, including models based on formal grammar. 
+In the 1970s, Frederick Jelinek and colleagues at IBM Research developed statistical approaches to language modeling as part of their work on speech recognition. The group used probabilistic n-gram models of word sequences and introduced perplexity as an information-theoretic...
+
+Natural language processing
+Natural language processing (NLP) is the processing of natural language information by a computer. NLP is a subfield of computer science and is closely associated with artificial intelligence. NLP is also related to information retrieval, knowledge representation, computational linguistics, and linguistics more broadly.
+Major processing tasks in an NLP system include: speech recognition, text classification, natural language understanding, and natural language generation.
+
+
+== History ==
+
+Natural language processing has its roots in the 1950s. Already in 1950, Alan Turing published an article titled "Computing Machinery and Intelligence," which proposed what is now called the Turing test as a criterion of intelligence, though at the time that was not articulated as a problem separate from artificial intelligence. The proposed test includes a task that involves the automated interpretation and generation of natural language.
+
+
+=== Symbolic NLP (1950s – early 1990s) ===
+
+The premise of symbolic NLP is often illustrated using John Searle's Chinese room thought experiment: Given a collection of rules (e.g., a Chinese phrasebook, with questions and matching answers), the computer emulates natural...
+
+UTF-8
+UTF-8 is a character encoding standard used for electronic communication. Defined by the Unicode Standard, the name is derived from Unicode Transformation Format –  8-bit. As of 2026, almost every webpage (99.1%) is transmitted as UTF-8.
+UTF-8 supports all 1,112,064 valid Unicode code points using a variable-width encoding of one to four one-byte (8-bit) code units.
+Code points with lower numerical values, which tend to occur more frequently, are encoded using fewer bytes. It was designed for backward compatibility with ASCII: the first 128 characters of Unicode, which correspond one-to-one with ASCII, are encoded using a single byte with the same binary value as ASCII, so that a UTF-8-encoded file using only those characters is identical to an ASCII file. Most software designed for any extended ASCII can read and write UTF-8, and this results in fewer internationalization issues than any alternative text encoding.
+UTF-8 is dominant for all countries/languages on the internet, is used in most standards, often the only allowed encoding, and is supported by all modern operating systems and programming languages.
+
+
+== History ==
+
+The International Organization for Standardization (ISO) set...
+
+C (programming language)
+C is a general-purpose programming language created in 1972 by Dennis Ritchie. By design, C gives programmers relatively direct access to the features of typical CPU architectures, customized for the target instruction set. It has been and continues to be used to implement operating systems (especially kernels), device drivers, and protocol stacks, though its use in application software is decreasing. C is used on computers ranging from supercomputers to microcontrollers and embedded systems.
+C was initially developed as a successor to the B programming language at Bell Labs by Ritchie between 1972 and 1973. Its initial purpose was to construct utilities running on Unix, and was later applied to re-implementing the kernel of the Unix operating system. During the 1980s, C gradually gained popularity, leading to it becoming one of the most widely used programming languages, with C compilers available for practically all modern computer architectures and operating systems. The book The C Programming Language, co-authored by the original language designer, served for many years as the de facto standard for the language. C has been standardized since 1989 by the American National Standards...
+
+OpenCL
+OpenCL (Open Computing Language) is a framework for writing programs that execute across heterogeneous platforms consisting of central processing units (CPUs), graphics processing units (GPUs), digital signal processors (DSPs), field-programmable gate arrays (FPGAs) and other processors or hardware accelerators. OpenCL specifies a programming language (based on C99) for programming these devices and application programming interfaces (APIs) to control the platform and execute programs on the compute devices. OpenCL provides a standard interface for parallel computing using task- and data-based parallelism.
+OpenCL is an open standard maintained by the Khronos Group, a non-profit, open standards organization. Conformant implementations (passed the Conformance Test Suite) are available from a range of companies including AMD, Arm, Cadence, Google, Imagination, Intel, Nvidia, Qualcomm, Samsung, SPI and Verisilicon.
+
+
+== Overview ==
+OpenCL views a computing system as consisting of a number of compute devices, which might be central processing units (CPUs) or "accelerators" such as graphics processing units (GPUs), attached to a host processor (a CPU). It defines a C-like language for writing...
+
+Gradient descent
+Gradient descent is a method for unconstrained mathematical optimization. It is a first-order iterative algorithm for minimizing a differentiable multivariate function.
+
+The idea is to take repeated steps in the opposite direction of the gradient (or approximate gradient) of the function at the current point, because this is the direction of steepest descent. Conversely, stepping in the direction of the gradient will lead to a trajectory that maximizes that function; the procedure is then known as gradient ascent.
+Gradient descent should not be confused with local search algorithms, although both are iterative methods for optimization.
+Gradient descent is particularly useful in machine learning and artificial intelligence for minimizing the cost or loss function. 
+Gradient descent is generally attributed to Augustin-Louis Cauchy, who first suggested it in 1847. Jacques Hadamard independently proposed a similar method in 1907. Its convergence properties for non-linear optimization problems were first studied by Haskell Curry in 1944, with the method becoming increasingly well-studied and used in the following decades.
+A simple extension of gradient descent, stochastic gradient descent...
+
+Machine learning
+Machine learning (ML) is a field of study in artificial intelligence concerned with the development and study of statistical algorithms that can learn from  data and generalize to unseen data, and thus perform tasks without being explicitly programmed.
+Statistics and mathematical optimisation methods compose the foundations of machine learning. Data mining is a related field of study, focusing on exploratory data analysis (EDA) through unsupervised learning.
+From a theoretical viewpoint, probably approximately correct learning provides a mathematical and statistical framework for describing machine learning. Most traditional machine learning and deep learning algorithms can be described as empirical risk minimisation under this framework.
+Advances in the field of deep learning have allowed neural networks, a class of statistical algorithms, to surpass many previous machine learning approaches in performance. The resulting dominance of machine learning within the field of AI from the late 2000s and early 2010s onwards was such that the terms "machine learning" and "artificial intelligence" are now often used interchangeably, even though they are not synonymous.
+
+
+== History ==
+
+The term...

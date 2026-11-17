@@ -1,0 +1,1403 @@
+Recurrent neural network
+In artificial neural networks, recurrent neural networks (RNNs) are designed for processing sequential data, such as text, speech, and time series, where the order of elements is important. Unlike feedforward neural networks, which process inputs independently, RNNs utilize recurrent connections, where the output of a neuron at one time step is fed back as input to the network at the next time step. This enables RNNs to capture temporal dependencies and patterns within sequences.
+The fundamental building block of RNN is the recurrent unit, which maintains a hidden state—a form of memory that is updated at each time step based on the current input and the previous hidden state. This feedback mechanism allows the network to learn from past inputs and incorporate that knowledge into its current processing. RNNs have been successfully applied to tasks such as unsegmented, connected handwriting recognition, speech recognition, natural language processing, and neural machine translation.
+However, traditional RNNs suffer from the vanishing gradient problem, which limits their ability to learn long-range dependencies. This issue was addressed by the development of the long short-term memory (LSTM) architecture in 1997, making it the standard RNN variant for handling long-term dependencies. Later, gated recurrent units (GRUs) were introduced as a more computationally efficient alternative.
+In recent years, transformers, which rely on self-attention mechanisms instead of recurrence, have become the dominant architecture for many sequence-processing tasks, particularly in natural language processing, due to their superior handling of long-range dependencies and greater parallelizability. Nevertheless, RNNs remain relevant for applications where computational efficiency, real-time processing, or the inherent sequential nature of data is crucial.
+
+
+== History ==
+
+
+=== Before modern ===
+One origin of RNN was neuroscience. The word "recurrent" is used to describe loop-like structures in anatomy. In 1901, Cajal observed "recurrent semicircles" in the cerebellar cortex formed by parallel fiber, Purkinje cells, and granule cells. In 1933, Lorente de Nó discovered "recurrent, reciprocal connections" by Golgi's method, and proposed that excitatory loops explain certain aspects of the vestibulo-ocular reflex. During 1940s, multiple people proposed the existence of feedback in the brain, which was a contrast to the previous understanding of the neural system as a purely feedforward structure. Hebb considered "reverberating circuit" as an explanation for short-term memory. The McCulloch and Pitts paper (1943), which proposed the McCulloch-Pitts neuron model, considered networks that contains cycles. The current activity of such networks can be affected by activity indefinitely far in the past. They were both interested in closed loops as possible explanations for e.g. epilepsy and causalgia. Recurrent inhibition was proposed in 1946 as a negative feedback mechanism in motor control. Neural feedback loops were a common topic of discussion at the Macy conferences. See  for an extensive review of recurrent neural network models in neuroscience.
+Frank Rosenblatt in 1960 published "close-loop cross-coupled perceptrons", which are 3-layered perceptron networks whose middle layer contains recurrent connections that change by a Hebbian learning rule. Later, in Principles of Neurodynamics (1961), he described "closed-loop cross-coupled" and "back-coupled" perceptron networks, and made theoretical and experimental studies for Hebbian learning in these networks, and noted that a fully cross-coupled perceptron network is equivalent to an infinitely deep feedforward network.
+Similar networks were published by Kaoru Nakano in 1971, Shun'ichi Amari in 1972, and William A. Little in 1974, who was acknowledged by Hopfield in his 1982 paper.
+Another origin of RNN was statistical mechanics. The Ising model was developed by Wilhelm Lenz and Ernst Ising in the 1920s as a simple statistical mechanical model of magnets at equilibrium. Glauber in 1963 studied the Ising model evolving in time, as a process towards equilibrium (Glauber dynamics), adding in the component of time.
+The Sherrington–Kirkpatrick model of spin glass, published in 1975, is the Hopfield network with random initialization. Sherrington and Kirkpatrick found that it is highly likely for the energy function of the SK model to have many local minima. In the 1982 paper, Hopfield applied this recently developed theory to study the Hopfield network with binary activation functions. In a 1984 paper he extended this to continuous activation functions. It became a standard model for the study of neural networks through statistical mechanics.
+
+
+=== Modern ===
+During the resurgence of neural networks in the 1980s, recurrent networks were studied again. Two influential architectures from this period were the Jordan network, proposed by Michael I. Jordan in 1986, and the Elman network, introduced by Jeffrey Elman in 1990.  
+Long short-term memory (LSTM) was introduced by Sepp Hochreiter and Jürgen Schmidhuber in 1997 to address difficulties in learning long-range dependencies with recurrent networks. The same year, Mike Schuster and Kuldip K. Paliwal introduced bidirectional recurrent neural networks (BRNNs), which process a sequence in both forward and backward directions. 
+Bidirectionality was subsequently combined with LSTM, and by the mid-2000s bidirectional LSTM networks had achieved strong results in speech recognition. They improved large-vocabulary speech recognition and text-to-speech synthesis and were used in Google voice search.
+Recurrent networks also proved effective for language modeling. In 2010, Tomáš Mikolov and co-authors demonstrated that recurrent neural-network language models could substantially outperform conventional n-gram models. 
+In 2014, Kyunghyun Cho and co-authors proposed an RNN encoder–decoder for machine translation, while another 2014 study demonstrated sequence-to-sequence learning using LSTMs. They became state of the art in machine translation, and were instrumental in the development of attention mechanisms and transformers.
+
+
+== Configurations ==
+
+An RNN-based model can be factored into two parts: configuration and architecture. Multiple RNNs can be combined in a data flow, and the data flow itself is the configuration. Each RNN itself may have any architecture, including LSTM, GRU, etc.
+
+
+=== Standard ===
+
+RNNs come in many variants. Abstractly speaking, an RNN is a function fθ of type (xt,ht)↦(yt,ht+1), where
+
+xt: input vector;
+ht: hidden vector;
+yt: output vector;
+θ: neural network parameters.
+In words, it is a neural network that maps an input xt into an output yt, with the hidden vector ht playing the role of "memory", a partial record of all previous input-output pairs. At each step, it transforms input to an output, and modifies its "memory" to help it to better perform future processing.
+The illustration to the right may be misleading to many because practical neural network topologies are frequently organized in "layers" and the drawing gives that appearance. However, what appears to be layers are, in fact, different steps in time, "unfolded" to produce the appearance of layers.
+
+
+=== Stacked RNN ===
+A stacked RNN, or deep RNN, is composed of multiple RNNs stacked one above the other. Abstractly, it is structured as follows
+Layer 1 has hidden vector h1,t, parameters θ1, and maps fθ1:(x0,t,h1,t)↦(x1,t,h1,t+1).
+Layer 2 has hidden vector h2,t, parameters θ2, and maps fθ2:(x1,t,h2,t)↦(x2,t,h2,t+1).
+...
+Layer n has hidden vector hn,t, parameters θn, and maps fθn:(xn−1,t,hn,t)↦(xn,t,hn,t+1).
+Each layer operates as a stand-alone RNN, and each layer's output sequence is used as the input sequence to the layer above. There is no conceptual limit to the depth of stacked RNN.
+
+
+=== Bidirectional ===
+
+A bidirectional RNN (biRNN) is composed of two RNNs, one processing the input sequence in one direction, and another in the opposite direction. Abstractly, it is structured as follows:
+The forward RNN processes in one direction: fθ(x0,h0)=(y0,h1),fθ(x1,h1)=(y1,h2),…
+The backward RNN processes in the opposite direction:f'θ′(xN,hN′)=(y'N,hN−1′),f'θ′(xN−1,hN−1′)=(y'N−1,hN−2′),…
+The two output sequences are then concatenated to give the total output: ((y0,y0′),(y1,y1′),…,(yN,yN′)).
+Bidirectional RNN allows the model to process a token both in the context of what came before it and what came after it. By stacking multiple bidirectional RNNs together, the model can process a token increasingly contextually. The ELMo model (2018) is a stacked bidirectional LSTM which takes character-level as inputs and produces word-level embeddings.
+
+
+=== Encoder-decoder ===
+
+Two RNNs can be run front-to-back in an encoder-decoder configuration. The encoder RNN processes an input sequence into a sequence of hidden vectors, and the decoder RNN processes the sequence of hidden vectors to an output sequence, with an optional attention mechanism. This was used to construct state of the art neural machine translators during the 2014–2017 period. This was an instrumental step towards the development of transformers.
+
+
+=== PixelRNN ===
+An RNN may process data with more than one dimension. PixelRNN processes two-dimensional data, with many possible directions. For example, the row-by-row direction processes an n×n grid of vectors xi,j in the following order: x1,1,x1,2,…,x1,n,x2,1,x2,2,…,x2,n,…,xn,nThe diagonal BiLSTM uses two LSTMs to process the same grid. One processes it from the top-left corner to the bottom-right, such that it processes xi,j depending on its hidden state and cell state on the top and the left side: hi−1,j,ci−1,j and hi,j−1,ci,j−1. The other processes it from the top-right corner to the bottom-left.
+
+
+=== Recursive ===
+
+A recursive neural network is an RNN operating over a directed acyclic graph (DAG) in topological order. The standard RNN is a special case where the DAG is a chain. There are 2×2 types: whether the number of children per node is bounded, and whether the children are ordered.
+
+Similar to the standard RNN, such networks are typically trained by the reverse mode of automatic differentiation. The standard RNN's backpropagation is called "backpropagation through time"; similarly the recursive neural network's backpropagation is called "backpropagation through structure", where the said structure is the DAG.
+Recursive neural networks have been used to process distributed representations of structure, such as logical terms. and natural language processing.
+
+
+== Architectures ==
+
+
+=== Fully recurrent ===
+
+Fully recurrent neural networks (FRNN) connect the outputs of all neurons to the inputs of all neurons. In other words, it is a fully connected network. This is the most general neural network topology, because all other topologies can be represented by setting some connection weights to zero to simulate the lack of connections between those neurons.
+
+
+=== Hopfield ===
+
+The Hopfield network is an RNN in which all connections across layers are equally sized. It requires stationary inputs and is thus not a general RNN, as it does not process sequences of patterns. However, it guarantees that it will converge. If the connections are trained using Hebbian learning, then the Hopfield network can perform as robust content-addressable memory, resistant to connection alteration.
+
+
+=== Elman networks and Jordan networks ===
+
+An Elman network is a three-layer network (arranged horizontally as x, y, and z in the illustration) with the addition of a set of context units (u in the illustration). The middle (hidden) layer is connected to these context units fixed with a weight of one. At each time step, the input is fed forward and a learning rule is applied. The fixed back-connections save a copy of the previous values of the hidden units in the context units (since they propagate over the connections before the learning rule is applied). Thus the network can maintain a sort of state, allowing it to perform tasks such as sequence-prediction that are beyond the power of a standard multilayer perceptron.
+Jordan networks are similar to Elman networks. The context units are fed from the output layer instead of the hidden layer. The context units in a Jordan network are also called the state layer. They have a recurrent connection to themselves.
+Elman and Jordan networks are also known as "Simple recurrent networks" (SRN).
+
+Elman network
+ht=σh(Whxt+Uhht−1+bh)yt=σy(Wyht+by)
+Jordan network
+ht=σh(Whxt+Uhst+bh)yt=σy(Wyht+by)st=σs(Ws,sst−1+Ws,yyt−1+bs)
+Variables and functions
+
+xt: input vector
+ht: hidden layer vector
+st: "state" vector,
+yt: output vector
+W, U and b: parameter matrices and vector
+σ: Activation functions
+
+
+=== Long short-term memory ===
+
+Long short-term memory (LSTM) is the most widely used RNN architecture. It was designed to solve the vanishing gradient problem. LSTM is normally augmented by recurrent gates called "forget gates". LSTM prevents backpropagated errors from vanishing or exploding. Instead, errors can flow backward through unlimited numbers of virtual layers unfolded in space. That is, LSTM can learn tasks that require memories of events that happened thousands or even millions of discrete time steps earlier. Problem-specific LSTM-like topologies can be evolved. LSTM works even given long delays between significant events and can handle signals that mix low and high-frequency components.
+Many applications use stacks of LSTMs, for which it is called "deep LSTM". LSTM can learn to recognize context-sensitive languages unlike previous models based on hidden Markov models (HMM) and similar concepts.
+
+
+=== Gated recurrent unit ===
+
+Gated recurrent unit (GRU), introduced in 2014, was designed as a simplification of LSTM. They are used in the full form and several further simplified variants. They have fewer parameters than LSTM, as they lack an output gate.
+Their performance on polyphonic music modeling and speech signal modeling was found to be similar to that of long short-term memory. There does not appear to be particular performance difference between LSTM and GRU.
+
+
+==== Bidirectional associative memory ====
+
+Introduced by Bart Kosko, a bidirectional associative memory (BAM) network is a variant of a Hopfield network that stores associative data as a vector. The bidirectionality comes from passing information through a matrix and its transpose. Typically, bipolar encoding is preferred to binary encoding of the associative pairs. Recently, stochastic BAM models using Markov stepping are optimized for increased network stability and relevance to real-world applications.
+A BAM network has two layers, either of which can be driven as an input to recall an association and produce an output on the other layer.
+
+
+=== Neural Turing machines ===
+
+Neural Turing machines (NTMs) are a method of extending recurrent neural networks by coupling them to external memory resources with which they interact. The combined system is analogous to a Turing machine or Von Neumann architecture but is differentiable end-to-end, allowing it to be efficiently trained with gradient descent.
+Differentiable neural computers (DNCs) are an extension of neural Turing machines, allowing for the usage of fuzzy amounts of each memory address and a record of chronology.
+Neural network pushdown automata (NNPDA) are similar to NTMs, but tapes are replaced by analog stacks that are differentiable and trained. In this way, they are similar in complexity to recognizers of context free grammars (CFGs).
+Recurrent neural networks are Turing complete and can run arbitrary programs to process arbitrary sequences of inputs.
+
+
+== Training ==
+
+
+=== Teacher forcing ===
+An RNN can be trained into a conditionally generative model of sequences, aka autoregression.
+Concretely, let us consider the problem of machine translation, that is, given a sequence (x1,x2,…,xn) of English words, the model is to produce a sequence (y1,…,ym) of French words. It is to be solved by a seq2seq model.
+Now, during training, the encoder half of the model would first ingest (x1,x2,…,xn), then the decoder half would start generating a sequence (ŷ1,ŷ2,…,ŷl). The problem is that if the model makes a mistake early on, say at ŷ2, then subsequent tokens are likely to also be mistakes. This makes it inefficient for the model to obtain a learning signal, since the model would mostly learn to shift ŷ2 towards y2, but not the others.
+Teacher forcing makes it so that the decoder uses the correct output sequence for generating the next entry in the sequence. So for example, it would see (y1,…,yk) in order to generate ŷk+1.
+
+
+=== Gradient descent ===
+
+Gradient descent is a first-order iterative optimization algorithm for finding the minimum of a function. In neural networks, it can be used to minimize the error term by changing each weight in proportion to the derivative of the error with respect to that weight, provided the non-linear activation functions are differentiable.
+The standard method for training RNN by gradient descent is the "backpropagation through time" (BPTT) algorithm, which is a special case of the general algorithm of backpropagation. A more computationally expensive online variant is called "Real-Time Recurrent Learning" or RTRL, which is an instance of automatic differentiation in the forward accumulation mode with stacked tangent vectors. Unlike BPTT, this algorithm is local in time but not local in space.
+In this context, local in space means that a unit's weight vector can be updated using only information stored in the connected units and the unit itself such that update complexity of a single unit is linear in the dimensionality of the weight vector. Local in time means that the updates take place continually (on-line) and depend only on the most recent time step rather than on multiple time steps within a given time horizon as in BPTT. Biological neural networks appear to be local with respect to both time and space.
+For recursively computing the partial derivatives, RTRL has a time-complexity of O(number of hidden x number of weights) per time step for computing the Jacobian matrices, while BPTT only takes O(number of weights) per time step, at the cost of storing all forward activations within the given time horizon. An online hybrid between BPTT and RTRL with intermediate complexity exists, along with variants for continuous time.
+A major problem with gradient descent for standard RNN architectures is that error gradients vanish exponentially quickly with the size of the time lag between important events. LSTM combined with a BPTT/RTRL hybrid learning method attempts to overcome these problems. This problem is also solved in the independently recurrent neural network (IndRNN) by reducing the context of a neuron to its own past state and the cross-neuron information can then be explored in the following layers. Memories of different ranges including long-term memory can be learned without the gradient vanishing and exploding problems.
+The online algorithm called causal recursive backpropagation (CRBP), implements and combines BPTT and RTRL paradigms for locally recurrent networks. It works with the most general locally recurrent networks. The CRBP algorithm can minimize the global error term. This fact improves the stability of the algorithm, providing a unifying view of gradient calculation techniques for recurrent networks with local feedback.
+One approach to gradient information computation in RNNs with arbitrary architectures is based on signal-flow graphs diagrammatic derivation. It uses the BPTT batch algorithm, based on Lee's theorem for network sensitivity calculations. It was proposed by Wan and Beaufays, while its fast online version was proposed by Campolucci, Uncini and Piazza.
+
+The connectionist temporal classification (CTC) is a specialized loss function for training RNNs for sequence modeling problems where the timing is variable.
+
+
+=== Global optimization methods ===
+Training the weights in a neural network can be modeled as a non-linear global optimization problem. A target function can be formed to evaluate the fitness or error of a particular weight vector as follows: First, the weights in the network are set according to the weight vector. Next, the network is evaluated against the training sequence. Typically, the sum-squared difference between the predictions and the target values specified in the training sequence is used to represent the error of the current weight vector. Arbitrary global optimization techniques may then be used to minimize this target function.
+The most common global optimization method for training RNNs is genetic algorithms, especially in unstructured networks.
+Initially, the genetic algorithm is encoded with the neural network weights in a predefined manner where one gene in the chromosome represents one weight link. The whole network is represented as a single chromosome. The fitness function is evaluated as follows:
+
+Each weight encoded in the chromosome is assigned to the respective weight link of the network.
+The training set is presented to the network which propagates the input signals forward.
+The mean-squared error is returned to the fitness function.
+This function drives the genetic selection process.
+Many chromosomes make up the population; therefore, many different neural networks are evolved until a stopping criterion is satisfied. A common stopping scheme can be: 
+
+When the neural network has learned a certain percentage of the training data.
+When the minimum value of the mean-squared-error is satisfied.
+When the maximum number of training generations has been reached.
+The fitness function evaluates the stopping criterion as it receives the mean-squared error reciprocal from each network during training. Therefore, the goal of the genetic algorithm is to maximize the fitness function, reducing the mean-squared error.
+Other global (and/or evolutionary) optimization techniques may be used to seek a good set of weights, such as simulated annealing or particle swarm optimization.
+
+
+== Other architectures ==
+
+
+=== Independently RNN (IndRNN) ===
+The independently recurrent neural network (IndRNN) addresses the gradient vanishing and exploding problems in the traditional fully connected RNN. Each neuron in one layer only receives its own past state as context information (instead of full connectivity to all other neurons in this layer) and thus neurons are independent of each other's history. The gradient backpropagation can be regulated to avoid gradient vanishing and exploding in order to keep long or short-term memory. The cross-neuron information is explored in the next layers. IndRNN can be robustly trained with non-saturated nonlinear functions such as ReLU. Deep networks can be trained using skip connections.
+
+
+=== Neural history compressor ===
+The neural history compressor is an unsupervised stack of RNNs. At the input level, it learns to predict its next input from the previous inputs. Only unpredictable inputs of some RNN in the hierarchy become inputs to the next higher level RNN, which therefore recomputes its internal state only rarely. Each higher level RNN thus studies a compressed representation of the information in the RNN below. This is done such that the input sequence can be precisely reconstructed from the representation at the highest level.
+The system effectively minimizes the description length or the negative logarithm of the probability of the data. Given a lot of learnable predictability in the incoming data sequence, the highest level RNN can use supervised learning to easily classify even deep sequences with long intervals between important events.
+It is possible to distill the RNN hierarchy into two RNNs: the "conscious" chunker (higher level) and the "subconscious" automatizer (lower level). Once the chunker has learned to predict and compress inputs that are unpredictable by the automatizer, then the automatizer can be forced in the next learning phase to predict or imitate through additional units the hidden units of the more slowly changing chunker. This makes it easy for the automatizer to learn appropriate, rarely changing memories across long intervals. In turn, this helps the automatizer to make many of its once unpredictable inputs predictable, such that the chunker can focus on the remaining unpredictable events.
+A generative model partially overcame the vanishing gradient problem of automatic differentiation or backpropagation in neural networks in 1992. In 1993, such a system solved a "Very Deep Learning" task that required more than 1000 subsequent layers in an RNN unfolded in time.
+
+
+=== Echo state ===
+
+Echo state networks (ESN) have a sparsely connected random hidden layer. The weights of output neurons are the only part of the network that can change (be trained). ESNs are good at reproducing certain time series. A variant for spiking neurons is known as a liquid state machine.
+
+
+=== Second order RNNs ===
+Second-order RNNs use higher order weights wijk instead of the standard wij weights, and states can be a product. This allows a direct mapping to a finite-state machine both in training, and representation. Long short-term memory is an example of this but has no such formal mappings or proof of stability.
+
+
+=== Hierarchical recurrent neural network ===
+Hierarchical recurrent neural networks (HRNN) connect their neurons in various ways to decompose hierarchical behavior into useful subprograms. Such hierarchical structures of cognition are present in theories of memory presented by philosopher Henri Bergson, whose philosophical views have inspired hierarchical models.
+Hierarchical recurrent neural networks are useful in forecasting, helping to predict disaggregated inflation components of the consumer price index (CPI). The HRNN model leverages information from higher levels in the CPI hierarchy to enhance lower-level predictions. Evaluation of a substantial dataset from the US CPI-U index demonstrates the superior performance of the HRNN model compared to various established inflation prediction methods.
+
+
+=== Recurrent multilayer perceptron network ===
+Generally, a recurrent multilayer perceptron network (RMLPN) consists of cascaded subnetworks, each containing multiple layers of nodes. Each subnetwork is feed-forward except for the last layer, which can have feedback connections. Each of these subnets is connected only by feed-forward connections.
+
+
+=== Multiple timescales model ===
+A multiple timescales recurrent neural network (MTRNN) is a neural-based computational model that can simulate the functional hierarchy of the brain through self-organization depending on the spatial connection between neurons and on distinct types of neuron activities, each with distinct time properties. With such varied neuronal activities, continuous sequences of any set of behaviors are segmented into reusable primitives, which in turn are flexibly integrated into diverse sequential behaviors. The biological approval of such a type of hierarchy was discussed in the memory-prediction theory of brain function by Hawkins in his book On Intelligence. Such a hierarchy also agrees with theories of memory posited by philosopher Henri Bergson, which have been incorporated into an MTRNN model.
+
+
+=== Memristive networks ===
+Greg Snider of HP Labs describes a system of cortical computing with memristive nanodevices. The memristors (memory resistors) are implemented by thin film materials in which the resistance is electrically tuned via the transport of ions or oxygen vacancies within the film. DARPA's SyNAPSE project has funded IBM Research and HP Labs, in collaboration with the Boston University Department of Cognitive and Neural Systems (CNS), to develop neuromorphic architectures that may be based on memristive systems.
+Memristive networks are a particular type of physical neural network that have very similar properties to (Little-)Hopfield networks, as they have continuous dynamics, a limited memory capacity and natural relaxation via the minimization of a function which is asymptotic to the Ising model. In this sense, the dynamics of a memristive circuit have the advantage compared to a Resistor-Capacitor network to have a more interesting non-linear behavior. From this point of view, engineering analog memristive networks account for a peculiar type of neuromorphic engineering in which the device behavior depends on the circuit wiring or topology.
+The evolution of these networks can be studied analytically using variations of the Caravelli-Traversa-Di Ventra equation.
+
+
+=== Continuous-time ===
+A continuous-time recurrent neural network (CTRNN) uses a system of ordinary differential equations to model the effects on a neuron of the incoming inputs. They are typically analyzed by dynamical systems theory. Many RNN models in neuroscience are continuous-time.
+For a neuron i in the network with activation yi, the rate of change of activation is given by:
+
+τiy˙i=−yi+∑j=1nwjiσ(yj−Θj)+Ii(t)
+Where:
+
+τi : Time constant of postsynaptic node
+yi : Activation of postsynaptic node
+y˙i : Rate of change of activation of postsynaptic node
+wji : Weight of connection from pre to postsynaptic node
+σ(x) : Sigmoid of x e.g. σ(x)=1/(1+e−x).
+yj : Activation of presynaptic node
+Θj : Bias of presynaptic node
+Ii(t) : Input (if any) to node
+CTRNNs have been applied to evolutionary robotics where they have been used to address vision, co-operation, and minimal cognitive behaviour.
+Note that, by the Shannon sampling theorem, discrete-time recurrent neural networks can be viewed as continuous-time recurrent neural networks where the differential equations have transformed into equivalent difference equations. This transformation can be thought of as occurring after the post-synaptic node activation functions yi(t) have been low-pass filtered but prior to sampling.
+They are in fact recursive neural networks with a particular structure: that of a linear chain. Whereas recursive neural networks operate on any hierarchical structure, combining child representations into child representations, recurrent neural networks operate on the linear progression of time, combining the previous time step and a hidden representation into the representation for the current time step.
+From a time-series perspective, RNNs can appear as nonlinear versions of finite impulse response and infinite impulse response filters and also as a nonlinear autoregressive exogenous model (NARX). RNN has infinite impulse response whereas convolutional neural network has finite impulse response. Both classes of networks exhibit temporal dynamic behavior. A finite impulse recurrent network is a directed acyclic graph that can be unrolled and replaced with a strictly feedforward neural network, while an infinite impulse recurrent network is a directed cyclic graph that cannot be unrolled.
+The effect of memory-based learning for the recognition of sequences can also be implemented by a more biological-based model which uses the silencing mechanism exhibited in neurons with a relatively high frequency spiking activity.
+Additional stored states and the storage under direct control by the network can be added to both infinite-impulse and finite-impulse networks. Another network or graph can also replace the storage if that incorporates time delays or has feedback loops. Such controlled states are referred to as gated states or gated memory and are part of long short-term memory networks (LSTMs) and gated recurrent units. This is also called Feedback Neural Network (FNN).
+
+
+== Libraries ==
+Modern libraries provide runtime-optimized implementations of the above functionality or allow to speed up the slow loop by just-in-time compilation.
+
+Apache Singa
+Caffe: Created by the Berkeley Vision and Learning Center (BVLC). It supports both CPU and GPU. Developed in C++, and has Python and MATLAB wrappers.
+Chainer: Fully in Python, production support for CPU, GPU, distributed training.
+Deeplearning4j: Deep learning in Java and Scala on multi-GPU-enabled Spark.
+Flux: includes interfaces for RNNs, including GRUs and LSTMs, written in Julia.
+Keras: High-level API, providing a wrapper to many other deep learning libraries.
+Microsoft Cognitive Toolkit
+MXNet: an open-source deep learning framework used to train and deploy deep neural networks.
+PyTorch: Tensors and Dynamic neural networks in Python with GPU acceleration.
+TensorFlow: Apache 2.0-licensed Theano-like library with support for CPU, GPU and Google's proprietary TPU, mobile
+Theano: A deep-learning library for Python with an API largely compatible with the NumPy library.
+Torch: A scientific computing framework with support for machine learning algorithms, written in C and Lua.
+
+
+== Applications ==
+Applications of recurrent neural networks include:
+
+Machine translation
+Robot control
+Time series prediction
+Speech recognition
+Speech synthesis
+Brain–computer interfaces
+Time series anomaly detection
+Text-to-Video model
+Energy forecasting
+Rhythm learning
+Music composition
+Grammar learning
+Handwriting recognition
+Human action recognition
+Protein homology detection
+Predicting subcellular localization of proteins
+Several prediction tasks in the area of business process management
+Prediction in medical care pathways
+Predictions of fusion plasma disruptions in reactors (Fusion Recurrent Neural Network (FRNN) code)
+
+
+== References ==
+
+
+== Further reading ==
+Mandic, Danilo P.; Chambers, Jonathon A. (2001). Recurrent Neural Networks for Prediction: Learning Algorithms, Architectures and Stability. Wiley. ISBN 978-0-471-49517-8.
+Grossberg, Stephen (2013-02-22). "Recurrent Neural Networks". Scholarpedia. 8 (2): 1888. Bibcode:2013SchpJ...8.1888G. doi:10.4249/scholarpedia.1888. ISSN 1941-6016.
+Recurrent Neural Networks. List of RNN papers by Jürgen Schmidhuber's group at Dalle Molle Institute for Artificial Intelligence Research.
+
+Language model
+A language model is a computational model that predicts sequences in natural language. Language models are useful for a variety of tasks, including speech recognition, machine translation, natural language generation (generating more human-like text), optical character recognition, route optimization, handwriting recognition, grammar induction, information retrieval and disaster response.
+Large language models (LLMs) are currently based on large transformers trained on large datasets (using texts scraped from the public internet, as well as any and all other text that can be obtained legally or illegally). They have superseded recurrent neural network-based models, which had previously superseded the purely statistical models, such as the word n-gram language model.
+
+
+== History ==
+During the 1950s, Noam Chomsky developed influential formal approaches to describing language, including models based on formal grammar. 
+In the 1970s, Frederick Jelinek and colleagues at IBM Research developed statistical approaches to language modeling as part of their work on speech recognition. The group used probabilistic n-gram models of word sequences and introduced perplexity as an information-theoretic measure of the uncertainty of a language model. Jelinek became a leading proponent of statistical language modeling.
+Neural language models became increasingly important in the 2000s, with Yoshua Bengio and co-authors introducing a probabilistic neural network language model that learned distributed word representations while estimating the probability of word sequences.
+Recurrent neural networks extended this approach by retaining information from earlier words as the sequence was processed. Tomáš Mikolov and colleagues demonstrated in 2010 that recurrent neural-network language models could substantially outperform conventional n-gram models.
+
+
+== Pure statistical models ==
+In 1980, the first significant statistical language model was proposed, and during the decade IBM performed 'Shannon-style' experiments, in which potential sources for language modeling improvement were identified by observing and analyzing the performance of human subjects in predicting or correcting text.
+
+
+=== Models based on word n-grams ===
+
+
+=== Exponential ===
+Maximum entropy language models encode the relationship between a word and the n-gram history using feature functions. The equation is
+P(wm∣w1,…,wm−1)=1Z(w1,…,wm−1)exp⁡(aTf(w1,…,wm))
+where Z(w1,…,wm−1) is the partition function, a is the parameter vector, and f(w1,…,wm) is the feature function. In the simplest case, the feature function is just an indicator of the presence of a certain n-gram. It is helpful to use a prior on a or some form of regularization.
+The log-bilinear model is another example of an exponential language model.
+
+
+=== Skip-gram model ===
+
+
+== Neural models ==
+
+
+=== Recurrent neural network ===
+Continuous representations or embeddings of words are produced in recurrent neural network-based language models (known also as continuous space language models). Such continuous space embeddings help to alleviate the curse of dimensionality, which is the consequence of the number of possible sequences of words increasing exponentially with the size of the vocabulary, further causing a data sparsity problem. Neural networks avoid this problem by representing words as non-linear combinations of weights in a neural net.
+
+
+=== Large language models ===
+
+Although sometimes matching human performance, it is not clear whether they are plausible cognitive models. At least for recurrent neural networks, it has been shown that they sometimes learn patterns that humans do not, but fail to learn patterns that humans typically do.
+
+
+== Evaluation and benchmarks ==
+Evaluation of the quality of language models is mostly done by comparison to human created sample benchmarks created from typical language-oriented tasks. Other, less established, quality tests examine the intrinsic character of a language model or compare two such models. Since language models are typically intended to be dynamic and to learn from data they see, some proposed models investigate the rate of learning, e.g., through inspection of learning curves.
+Various data sets have been developed for use in evaluating language processing systems. These include:
+
+Massive Multitask Language Understanding (MMLU)
+Corpus of Linguistic Acceptability
+GLUE benchmark
+Microsoft Research Paraphrase Corpus
+Multi-Genre Natural Language Inference
+Question Natural Language Inference
+Quora Question Pairs
+Recognizing Textual Entailment
+Semantic Textual Similarity Benchmark
+SQuAD question answering Test
+Stanford Sentiment Treebank
+Winograd NLI
+BoolQ, PIQA, SIQA, HellaSwag, WinoGrande, ARC, OpenBookQA, NaturalQuestions, TriviaQA, RACE, BIG-bench hard, GSM8k, RealToxicityPrompts, WinoGender, CrowS-Pairs
+
+
+== See also ==
+
+
+== References ==
+
+
+== Further reading ==
+
+Natural language processing
+Natural language processing (NLP) is the processing of natural language information by a computer. NLP is a subfield of computer science and is closely associated with artificial intelligence. NLP is also related to information retrieval, knowledge representation, computational linguistics, and linguistics more broadly.
+Major processing tasks in an NLP system include: speech recognition, text classification, natural language understanding, and natural language generation.
+
+
+== History ==
+
+Natural language processing has its roots in the 1950s. Already in 1950, Alan Turing published an article titled "Computing Machinery and Intelligence," which proposed what is now called the Turing test as a criterion of intelligence, though at the time that was not articulated as a problem separate from artificial intelligence. The proposed test includes a task that involves the automated interpretation and generation of natural language.
+
+
+=== Symbolic NLP (1950s – early 1990s) ===
+
+The premise of symbolic NLP is often illustrated using John Searle's Chinese room thought experiment: Given a collection of rules (e.g., a Chinese phrasebook, with questions and matching answers), the computer emulates natural language understanding (or other NLP tasks) by applying those rules to the data it confronts.
+
+1950s: The Georgetown experiment in 1954 involved fully automatic translation of more than sixty Russian sentences into English. The authors claimed that within three or five years, machine translation would be a solved problem.  However, real progress was much slower, and after the ALPAC report in 1966, which found that ten years of research had failed to fulfill the expectations, funding for machine translation was dramatically reduced. Little further research in machine translation was conducted in America (though some research continued elsewhere, such as Japan and Europe) until the late 1980s when the first statistical machine translation systems were developed.
+1960s: Some notably successful natural language processing systems developed in the 1960s were SHRDLU, a natural language system working in restricted "blocks worlds" with restricted vocabularies, and ELIZA, a simulation of Rogerian psychotherapy, written by Joseph Weizenbaum between 1964 and 1966. Despite using minimal information about human thought or emotion, ELIZA was able to produce interactions that appeared human-like. When the "patient" exceeded the very small knowledge base, ELIZA might provide a generic response, for example, responding to "My head hurts" with "Why do you say your head hurts?". Ross Quillian's successful work on natural language was demonstrated with a vocabulary of only twenty words, because that was all that would fit in a computer memory at the time.
+1970s: During the 1970s, many programmers began to write "conceptual ontologies", which structured real-world information into computer-understandable data.  Examples are MARGIE (Schank, 1975), SAM (Cullingford, 1978), PAM (Wilensky, 1978), TaleSpin (Meehan, 1976), QUALM (Lehnert, 1977), Politics (Carbonell, 1979), and Plot Units (Lehnert 1981). During this time, the first chatterbots were written (e.g., PARRY).
+1980s: The 1980s and early 1990s mark the heyday of symbolic methods in NLP. Focus areas of the time included research on rule-based parsing (e.g., the development of HPSG as a computational operationalization of generative grammar), morphology (e.g., two-level morphology), semantics (e.g., Lesk algorithm), reference (e.g., within Centering Theory) and other areas of natural language understanding (e.g., in the Rhetorical Structure Theory). Other lines of research were continued, e.g., the development of chatterbots with Racter and Jabberwacky. An important development (that eventually led to the statistical turn in the 1990s) was the rising importance of quantitative evaluation in this period.
+
+
+=== Statistical NLP (1990s–present) ===
+Up until the 1980s, most natural language processing systems were based on complex sets of hand-written rules. Starting in the late 1980s, however, there was a revolution in natural language processing with the introduction of machine learning algorithms for language processing. This shift was influenced by increasing computational power (see Moore's law) and a decline in the dominance of Chomskyan linguistic theories (e.g. transformational grammar), whose theoretical underpinnings discouraged the sort of corpus linguistics that underlies the machine-learning approach to language processing. 
+
+1990s: Many early successes of statistical NLP occurred in machine translation, particularly through work at IBM Research. An IBM team including Frederick Jelinek, Peter F. Brown, and Robert Mercer developed a probabilistic approach to translation, described in the 1990 paper A Statistical Approach to Machine Translation. The work used parallel English and French text from the proceedings of the Parliament of Canada and was subsequently developed into the IBM alignment models. However, such systems often depended on large task-specific corpora, making the availability of suitable training data an important limitation.
+2000s: With the growth of the web, increasing amounts of raw (unannotated) language data have become available since the mid-1990s. Research has thus increasingly focused on unsupervised and semi-supervised learning algorithms. Such algorithms can learn from data that has not been hand-annotated with the desired answers or using a combination of annotated and non-annotated data. Generally, this task is much more difficult than supervised learning, and typically produces less accurate results for a given amount of input data. However, large quantities of non-annotated data are available (including, among other things, the entire content of the World Wide Web), which can often make up for the worse efficiency if the algorithm used has a low enough time complexity to be practical.
+2003: word n-gram model, at the time the best statistical algorithm, is outperformed by a multi-layer perceptron (with a single hidden layer and context length of several words, trained on up to 14 million words, by Bengio et al.)
+2010: Tomáš Mikolov (then a PhD student at Brno University of Technology) with co-authors applied a simple recurrent neural network with a single hidden layer to language modeling, and in the following years he went on to develop Word2vec. In the 2010s, representation learning and deep neural network-style (featuring many hidden layers) machine learning methods became widespread in natural language processing. This shift gained momentum due to results showing that such techniques can achieve state-of-the-art results in many natural language tasks, e.g., in language modeling and parsing. This is increasingly important in medicine and healthcare, where NLP helps analyze notes and text in electronic health records that would otherwise be inaccessible for study when seeking to improve care or protect patient privacy.
+
+
+== Approaches: Symbolic, statistical, neural networks ==
+Symbolic approach, i.e., the hand-coding of a set of rules for manipulating symbols, coupled with a dictionary lookup, was historically the first approach used both by AI in general and by NLP in particular: such as by writing grammars or devising heuristic rules for stemming.
+Machine learning approaches, which include both statistical and neural networks, on the other hand, have many advantages over the symbolic approach:
+
+both statistical and neural network methods tend to focus more on the most common cases extracted from a corpus of texts, whereas the rule-based approach needs to provide rules for both rare and common cases equally.
+language models, produced by either statistical or neural network methods, are more robust to both unfamiliar (e.g. containing words or structures that have not been seen before) and erroneous input (e.g. with misspelled words or words accidentally omitted) in comparison to the rule-based systems, which are also more costly to produce.
+the larger such a (probabilistic) language model is, the more accurate it becomes, in contrast to rule-based systems that can gain accuracy only by increasing the amount and complexity of the rules leading to intractability problems.
+Rule-based systems are commonly used:
+
+when the amount of training data is insufficient to successfully apply machine learning methods, e.g., for the machine translation of low-resource languages such as provided by the Apertium system,
+for preprocessing in NLP pipelines, e.g., tokenization, or
+for post-processing and transforming the output of NLP pipelines, e.g., for knowledge extraction from syntactic parses.
+
+
+=== Statistical approach ===
+In the late 1980s and mid-1990s, the statistical approach ended a period of AI winter, which was caused by the inefficiencies of the rule-based approaches.
+The earliest decision trees, producing systems of hard if–then rules, were still very similar to the old rule-based approaches.
+Only the introduction of hidden Markov models, applied to part-of-speech tagging, announced the end of the old rule-based approach.
+
+
+=== Neural networks ===
+
+A major drawback of statistical methods is that they require elaborate feature engineering. Since 2015, neural network–based methods have increasingly replaced traditional statistical approaches, using semantic networks and word embeddings to capture semantic properties of words.
+Intermediate tasks (e.g., part-of-speech tagging and dependency parsing) are not needed anymore.
+Neural machine translation, based on the then-newly invented sequence-to-sequence transformations, made obsolete the intermediate steps, such as word alignment, previously necessary for statistical machine translation.
+
+
+== Common NLP tasks ==
+The following is a list of some of the most commonly researched tasks in natural language processing. Some of these tasks have direct real-world applications, while others more commonly serve as subtasks that are used to aid in solving larger tasks.
+Though natural language processing tasks are closely intertwined, they can be subdivided into categories for convenience. A coarse division is given below.
+
+
+=== Text and speech processing ===
+
+Optical character recognition (OCR)
+Given an image representing printed text, determine the corresponding text.
+Speech recognition
+Given a sound clip of a person or people speaking, determine the textual representation of the speech.  This is the opposite of text to speech and is one of the extremely difficult problems colloquially termed "AI-complete" (see above).  In natural speech there are hardly any pauses between successive words, and thus speech segmentation is a necessary subtask of speech recognition (see below). In most spoken languages, the sounds representing successive letters blend into each other in a process termed coarticulation, so the conversion of the analog signal to discrete characters can be a very difficult process. Also, given that words in the same language are spoken by people with different accents, the speech recognition software must be able to recognize the wide variety of input as being identical to each other in terms of its textual equivalent.
+Speech segmentation
+Given a sound clip of a person or people speaking, separate it into words.  A subtask of speech recognition and typically grouped with it.
+Text-to-speech
+Given a text, transform those units and produce a spoken representation. Text-to-speech can be used to aid the visually impaired.
+Word segmentation (Tokenization)
+Tokenization is a text-processing technique that divides text into individual words or word fragments. This technique results in two key components: a word index and tokenized text. The word index is a list that maps unique words to specific numerical identifiers, and the tokenized text replaces each word with its corresponding numerical token. These numerical tokens are then used in various deep learning methods.For a language like English, this is fairly trivial, since words are usually separated by spaces. However, some written languages like Chinese, Japanese and Thai do not mark word boundaries in such a fashion, and in those languages text segmentation is a significant task requiring knowledge of the vocabulary and morphology of words in the language. Sometimes this process is also used in cases like bag of words (BOW) creation in data mining.
+
+
+=== Morphological analysis ===
+
+Lemmatization
+The task of removing inflectional endings only and returning the base dictionary form of a word which is also known as a lemma. Lemmatization is another technique for reducing words to their normalized form. But in this case, the transformation actually uses a dictionary to map words to their actual form.
+Morphological segmentation
+Separate words into individual morphemes and identify the class of the morphemes. The difficulty of this task depends greatly on the complexity of the morphology (i.e., the structure of words) of the language being considered. English has fairly simple morphology, especially inflectional morphology, and thus it is often possible to ignore this task entirely and simply model all possible forms of a word (e.g., "open, opens, opened, opening") as separate words. In languages such as Turkish or Meitei, a highly agglutinated Indian language, however, such an approach is not possible, as each dictionary entry has thousands of possible word forms.
+Part-of-speech tagging
+Given a sentence, determine the part of speech (POS) for each word. Many words, especially common ones, can serve as multiple parts of speech. For example, "book" can be a noun ("the book on the table") or verb ("to book a flight"); "set" can be a noun, verb or adjective; and "out" can be any of at least five different parts of speech.
+Stemming
+The process of reducing inflected (or sometimes derived) words to a base form (e.g., "close" will be the root for "closed", "closing", "close", "closer" etc.). Stemming yields similar results as lemmatization, but does so on grounds of rules, not a dictionary.
+
+
+=== Syntactic analysis ===
+
+Grammar induction
+Generate a formal grammar that describes a language's syntax.
+Sentence breaking (also known as "sentence boundary disambiguation")
+Given a chunk of text, find the sentence boundaries. Sentence boundaries are often marked by periods or other punctuation marks, but these same characters can serve other purposes (e.g., marking abbreviations).
+Parsing
+Determine the parse tree (grammatical analysis) of a given sentence. The grammar for natural languages is ambiguous and typical sentences have multiple possible analyses: perhaps surprisingly, for a typical sentence there may be thousands of potential parses (most of which will seem completely nonsensical to a human). There are two primary types of parsing: dependency parsing and constituency parsing. Dependency parsing focuses on the relationships between words in a sentence (marking things like primary objects and predicates), whereas constituency parsing focuses on building out the parse tree using a probabilistic context-free grammar (PCFG) (see also stochastic grammar).
+
+
+=== Lexical semantics (of individual words in context) ===
+
+Lexical semantics
+What is the computational meaning of individual words in context?
+Distributional semantics
+How can we learn semantic representations from data?
+Named entity recognition (NER)
+Given a stream of text, determine which items in the text map to proper names, such as people or places, and what the type of each such name is (e.g. person, location, organization). Although capitalization can aid in recognizing named entities in languages such as English, this information cannot aid in determining the type of named entity, and in any case, is often inaccurate or insufficient.  For example, the first letter of a sentence is also capitalized, and named entities often span several words, only some of which are capitalized.  Furthermore, many other languages in non-Western scripts (e.g. Chinese or Arabic) do not have any capitalization at all, and even languages with capitalization may not consistently use it to distinguish names. For example, German capitalizes all nouns, regardless of whether they are names, and French and Spanish do not capitalize names that serve as adjectives. This task is also referred to as token classification.
+Sentiment analysis (see also Multimodal sentiment analysis)
+Sentiment analysis involves identifying and classifying the emotional tone expressed in text. This technique involves analyzing text to determine whether the expressed sentiment is positive, negative, or neutral. Models for sentiment classification typically utilize inputs such as word n-grams, Term Frequency-Inverse Document Frequency (TF-IDF) features, hand-generated features, or employ deep learning models designed to recognize both long-term and short-term dependencies in text sequences. The applications of sentiment analysis are diverse, extending to tasks such as categorizing customer reviews on various online platforms.
+Terminology extraction
+The goal of terminology extraction is to automatically extract relevant terms from a given corpus.
+Word-sense disambiguation (WSD)
+Many words have more than one meaning; we have to select the meaning which makes the most sense in context.  For this problem, we are typically given a list of words and associated word senses, e.g. from a dictionary or an online resource such as WordNet.
+Entity linking
+Many words—typically proper names—refer to named entities; here we have to select the entity (a famous individual, a location, a company, etc.) which is referred to in context.
+
+
+=== Relational semantics (semantics of individual sentences) ===
+Relationship extraction
+Given a chunk of text, identify the relationships among named entities (e.g. who is married to whom).
+Semantic parsing
+Given a piece of text (typically a sentence), produce a formal representation of its semantics, either as a graph (e.g., in AMR parsing) or in accordance with a logical formalism (e.g., in DRT parsing). This challenge typically includes aspects of several more elementary NLP tasks from semantics (e.g., semantic role labelling, word-sense disambiguation) and can be extended to include full-fledged discourse analysis (e.g., discourse analysis, coreference; see Natural language understanding below).
+Semantic role labelling (see also implicit semantic role labelling below)
+Given a single sentence, identify and disambiguate semantic predicates (e.g., verbal frames), then identify and classify the frame elements (semantic roles).
+
+
+=== Discourse (semantics beyond individual sentences) ===
+Coreference resolution
+Given a sentence or larger chunk of text, determine which words ("mentions") refer to the same objects ("entities"). Anaphora resolution is a specific example of this task, and is specifically concerned with matching up pronouns with the nouns or names to which they refer. The more general task of coreference resolution also includes identifying so-called "bridging relationships" involving referring expressions. For example, in a sentence such as "He entered John's house through the front door", "the front door" is a referring expression and the bridging relationship to be identified is the fact that the door being referred to is the front door of John's house (rather than of some other structure that might also be referred to).
+Discourse analysis
+This rubric includes several related tasks. One task is discourse parsing, i.e., identifying the discourse structure of a connected text, i.e. the nature of the discourse relationships between sentences (e.g. elaboration, explanation, contrast). Another possible task is recognizing and classifying the speech acts in a chunk of text (e.g. yes–no question, content question, statement, assertion, etc.).
+Implicit semantic role labelling
+Given a single sentence, identify and disambiguate semantic predicates (e.g., verbal frames) and their explicit semantic roles in the current sentence (see Semantic role labelling above). Then, identify semantic roles that are not explicitly realized in the current sentence, classify them into arguments that are explicitly realized elsewhere in the text and those that are not specified, and resolve the former against the local text. A closely related task is zero anaphora resolution, i.e., the extension of coreference resolution to pro-drop languages.
+Recognizing textual entailment
+Given two text fragments, determine if one being true entails the other, entails the other's negation, or allows the other to be either true or false.
+Topic segmentation and recognition
+Given a chunk of text, separate it into segments each of which is devoted to a topic, and identify the topic of the segment.
+Argument mining
+The goal of argument mining is the automatic extraction and identification of argumentative structures from natural language text with the aid of computer programs. Such argumentative structures include the premise, conclusions, the argument scheme and the relationship between the main and subsidiary argument, or the main and counter-argument within discourse.
+
+
+=== Higher-level NLP applications ===
+
+Automatic summarization (text summarization)
+Produce a readable summary of a chunk of text.  Often used to provide summaries of the text of a known type, such as research papers, articles in the financial section of a newspaper.
+Grammatical error correction
+Grammatical error detection and correction involves a great bandwidth of problems on all levels of linguistic analysis (phonology/orthography, morphology, syntax, semantics, pragmatics). Grammatical error correction is impactful since it affects hundreds of millions of people who use or acquire English as a second language. It has thus been subject to a number of shared tasks since 2011. As far as orthography, morphology, syntax and certain aspects of semantics are concerned, and due to the development of powerful neural language models such as GPT-2, this can now (2019) be considered a largely solved problem and is being marketed in various commercial applications.
+Logic translation
+Translate a text from a natural language into formal logic.
+Machine translation (MT)
+Automatically translate text from one human language to another.  This is one of the most difficult problems, and is a member of a class of problems colloquially termed "AI-complete", i.e. requiring all of the different types of knowledge that humans possess (grammar, semantics, facts about the real world, etc.) to solve properly.
+Natural language understanding (NLU)
+Convert chunks of text into more formal representations such as first-order logic structures that are easier for computer programs to manipulate. Natural language understanding involves the identification of the intended semantic from the multiple possible semantics that can be derived from a natural language expression which usually takes the form of organized notations of natural language concepts. Introduction and creation of language metamodels and ontologies are efficient but empirical solutions. An explicit formalization of natural language semantics without confusion with implicit assumptions such as closed-world assumption (CWA) vs. open-world assumption, or subjective Yes/No vs. objective True/False is expected for the construction of a basis of semantics formalization.
+Natural language generation (NLG):
+Convert information from computer databases or semantic intents into readable human language.
+Book generation
+Not an NLP task proper but an extension of natural language generation and other NLP tasks is the creation of full-fledged books. The first machine-generated book was created by a rule-based system in 1984 (Racter, The policeman's beard is half-constructed). The first published work by a neural network was published in 2018, 1 the Road, marketed as a novel, contains sixty million words. Both these systems are basically elaborate but nonsensical (semantics-free) language models. The first machine-generated science book was published in 2019 (Beta Writer, Lithium-Ion Batteries, Springer, Cham). Unlike Racter and 1 the Road, this is grounded on factual knowledge and based on text summarization.
+Document AI
+A Document AI platform sits on top of the NLP technology enabling users with no prior experience of artificial intelligence, machine learning or NLP to quickly train a computer to extract the specific data they need from different document types. NLP-powered Document AI enables non-technical teams to quickly access information hidden in documents, for example, lawyers, business analysts and accountants.
+Dialogue management
+Computer systems intended to converse with a human.
+Question answering
+Given a human-language question, determine its answer. Typical questions have a specific right answer (such as "What is the capital of Canada?"), but sometimes open-ended questions are also considered (such as "What is the meaning of life?").
+Text-to-image generation
+Given a description of an image, generate an image that matches the description.
+Text-to-scene generation
+Given a description of a scene, generate a 3D model of the scene.
+Text-to-video
+Given a description of a video, generate a video that matches the description.
+
+
+== General tendencies and (possible) future directions ==
+Based on long-standing trends in the field, it is possible to extrapolate future directions of NLP. As of 2020, three trends among the topics of the long-standing series of CoNLL Shared Tasks can be observed:
+
+Interest in increasingly abstract, "cognitive" aspects of natural language (1999–2001: shallow parsing, 2002–03: named entity recognition, 2006–09/2017–18: dependency syntax, 2004–05/2008–09 semantic role labelling, 2011–12 coreference, 2015–16: discourse parsing, 2019: semantic parsing).
+Increasing interest in multilinguality, and, potentially, multimodality (English since 1999; Spanish, Dutch since 2002; German since 2003; Bulgarian, Danish, Japanese, Portuguese, Slovenian, Swedish, Turkish since 2006; Basque, Catalan, Chinese, Greek, Hungarian, Italian, Turkish since 2007; Czech since 2009; Arabic since 2012; 2017: 40+ languages; 2018: 60+/100+ languages)
+Elimination of symbolic representations (rule-based over supervised towards weakly supervised methods, representation learning and end-to-end systems)
+
+
+=== Cognition ===
+Most higher-level NLP applications involve aspects that emulate intelligent behavior and apparent comprehension of natural language. More broadly speaking, the technical operationalization of increasingly advanced aspects of cognitive behavior represents one of the developmental trajectories of NLP(see trends among CoNLL shared tasks above).
+Cognition refers to "the mental action or process of acquiring knowledge and understanding through thought, experience, and the senses." Cognitive science is the interdisciplinary, scientific study of the mind and its processes. Cognitive linguistics is an interdisciplinary branch of linguistics, combining knowledge and research from both psychology and linguistics. Especially during the age of symbolic NLP, the area of computational linguistics maintained strong ties with cognitive studies.
+As an example, George Lakoff offers a methodology to build natural language processing (NLP) algorithms through the perspective of cognitive science, along with the findings of cognitive linguistics, with two defining aspects:
+
+Apply the theory of conceptual metaphor, explained by Lakoff as "the understanding of one idea, in terms of another" which provides an idea of the intent of the author. For example, consider the English word big. When used in a comparison ("That is a big tree"), the author intends to imply that the tree is physically large relative to other trees or the author's experience. When used metaphorically ("Tomorrow is a big day"), the author intends to imply importance. The intent behind other usages, like in "She is a big person", will remain somewhat ambiguous to a person and a cognitive NLP algorithm alike without additional information.
+Assign relative measures of meaning to a word, phrase, sentence or piece of text based on the information presented before and after the piece of text being analyzed, e.g., by means of a probabilistic context-free grammar (PCFG). The mathematical equation for such algorithms is presented in US Patent 9269353: RMM(tokenN)=PMM(tokenN)×12d(∑i=−dd((PMM(tokenN)×PF(tokenN−i,tokenN,tokenN+i))i) where
+RMM is the relative measure of meaning
+token is any block of text, sentence, phrase or word
+N is the number of tokens being analyzed
+PMM is the probable measure of meaning based on a corpora
+d is the non-zero location of the token along the sequence of N tokens
+PF is the probability function specific to a language
+Ties with cognitive linguistics are part of the historical heritage of NLP, but they have been less frequently addressed since the statistical turn during the 1990s. Nevertheless, approaches to develop cognitive models towards technically operationalizable frameworks have been pursued in the context of various frameworks, e.g., of cognitive grammar, functional grammar, construction grammar, computational psycholinguistics and cognitive neuroscience (e.g., ACT-R), however, with limited uptake in mainstream NLP (as measured by presence on major conferences of the ACL). More recently, ideas of cognitive NLP have been revived as an approach to achieve explainability, e.g., under the notion of "cognitive AI". Likewise, ideas of cognitive NLP are inherent to neural models multimodal NLP (although rarely made explicit) and developments in artificial intelligence, specifically tools and technologies using large language model approaches and new directions in artificial general intelligence based on the free energy principle by British neuroscientist and theoretician at University College London Karl J. Friston.
+
+
+== See also ==
+
+
+== References ==
+
+
+== Further reading ==
+
+
+== External links ==
+ Media related to Natural language processing at Wikimedia Commons
+
+UTF-8
+UTF-8 is a character encoding standard used for electronic communication. Defined by the Unicode Standard, the name is derived from Unicode Transformation Format –  8-bit. As of 2026, almost every webpage (99.1%) is transmitted as UTF-8.
+UTF-8 supports all 1,112,064 valid Unicode code points using a variable-width encoding of one to four one-byte (8-bit) code units.
+Code points with lower numerical values, which tend to occur more frequently, are encoded using fewer bytes. It was designed for backward compatibility with ASCII: the first 128 characters of Unicode, which correspond one-to-one with ASCII, are encoded using a single byte with the same binary value as ASCII, so that a UTF-8-encoded file using only those characters is identical to an ASCII file. Most software designed for any extended ASCII can read and write UTF-8, and this results in fewer internationalization issues than any alternative text encoding.
+UTF-8 is dominant for all countries/languages on the internet, is used in most standards, often the only allowed encoding, and is supported by all modern operating systems and programming languages.
+
+
+== History ==
+
+The International Organization for Standardization (ISO) set out to compose a universal multi-byte character set in 1989. The draft ISO 10646 standard contained a non-required annex called UTF-1 that provided a byte stream encoding of its 32-bit code points. This encoding was not satisfactory on performance grounds, among other problems, and the biggest problem was probably that it did not have a clear separation between ASCII and non-ASCII: new UTF-1 tools would be backward compatible with ASCII-encoded text, but UTF-1-encoded text could confuse existing code expecting ASCII (or extended ASCII), because it could contain continuation bytes in the range 0x21–0x7E that meant something else in ASCII, e.g., 0x2F for /, the Unix path directory separator.
+In July 1992, the X/Open committee XoJIG was looking for a better encoding. Dave Prosser of Unix System Laboratories submitted a proposal for one that had faster implementation characteristics and introduced the improvement that 7-bit ASCII characters would only represent themselves; multi-byte sequences would only include bytes with the high bit set. The name File System Safe UCS Transformation Format (FSS-UTF) and most of the text of this proposal were later preserved in the final specification. In August 1992, this proposal was circulated by an IBM X/Open representative to interested parties. 
+A modification by Ken Thompson of the Plan 9 operating system group at Bell Labs made it self-synchronizing, letting a reader start anywhere and immediately detect character boundaries, at the cost of being somewhat less bit-efficient than the previous proposal. It also abandoned the use of biases that prevented overlong encodings. Thompson's design was outlined on September 2, 1992, on a placemat in a New Jersey diner with Rob Pike. In the following days, Pike and Thompson implemented it and updated Plan 9 to use it throughout, and then communicated their success back to X/Open, which accepted it as the specification for FSS-UTF. UTF-8 was first officially presented at the USENIX conference in San Diego, from January 25 to 29, 1993. The Internet Engineering Task Force adopted UTF-8 in its Policy on Character Sets and Languages in RFC 2277 (BCP 18) for future internet standards work in January 1998, replacing Single Byte Character Sets such as Latin-1 in older RFCs.
+Earlier standards for UTF-8, like RFC 2279, could encode up to 31 bits in six bytes. In November 2003, UTF-8 was restricted by RFC 3629 to match the constraints of the UTF-16 character encoding: explicitly prohibiting code points corresponding to the high and low surrogate characters removed  more than 3% of the three-byte sequences, and ending at U+10FFFF removed  more than 48% of the four-byte sequences and all five- and six-byte sequences.
+
+
+== Description ==
+UTF-8 encodes code points in one to four bytes, depending on the value of the code point. In the following table, the letters u through z represent the hexadecimal digits of a character’s Unicode number (U+uvwxyz, or U+wxyz for a four-digit number). In the binary column, each hex digit is expanded into its 4-bit binary equivalent (uuuu to zzzz) to show how its bits are distributed across the UTF-8 bytes.
+
+As an example, the character 桁 has the hexadecimal code point U+6841, which is 0110 1000 0100 0001 in binary, which makes its UTF-8 encoding 11100110 10100001 10000001.
+The first 128 code points (ASCII) need one byte. The next 1,920 code points need two bytes to encode, which covers the remainder of almost all Latin-script alphabets, and also IPA extensions, Greek, Cyrillic, Coptic, Armenian, Hebrew, Arabic, Syriac, Thaana and N'Ko alphabets, as well as Combining Diacritical Marks. Three bytes are needed for the remaining 61,440 codepoints of the Basic Multilingual Plane (BMP), including most Chinese, Japanese and Korean characters. Four bytes are needed for the 1,048,576 non-BMP code points, which include emoji, less common CJK characters, and other useful characters.
+UTF-8 is a prefix code and it is unnecessary to read past the last byte of a code point to decode it. Unlike many earlier multi-byte text encodings such as Shift-JIS, it is self-synchronizing so searches for short strings or characters are possible; and the start of a code point can be found from a random position by backing up at most three bytes. The values chosen for the lead bytes means sorting a list of UTF-8 strings puts them in the same order as sorting UTF-32 strings.
+
+
+=== Overlong encodings ===
+
+Using a row in the above table to encode a code point less than "First code point" (thus using more bytes than necessary) is termed an overlong encoding. For example, the hexadecimal code point U+003F (which would normally be encoded as the single byte 0x3F), would be encoded as 0xC0 0xBF using the second row. These are a security problem because they allow character sequences to bypass other security validations like the blocking of ../ or of malicious JavaScript. There have been numerous high-profile vulnerabilities involving overlong encodings reported in products such as Microsoft's IIS web server and Apache's Tomcat servlet container. Overlong encodings should therefore be considered an error and never decoded.
+
+
+=== Error handling ===
+Not all sequences of bytes are valid UTF-8. A UTF-8 decoder should be prepared for:
+
+A "continuation byte" (0x80–0xBF) at the start of a character
+A non-continuation byte (or the string ending) before the end of a character
+An overlong encoding (0xC0, 0xC1, 0xE0 followed by less than 0xA0, or 0xF0 followed by less than 0x90)
+A multi-byte sequence that decodes to a value greater than U+10FFFF (0xF4 followed by 0x90 or greater, 0xF5–0xFF)
+Many of the first UTF-8 decoders would decode these, ignoring incorrect bits. Carefully crafted invalid UTF-8 could make them either skip or create ASCII characters such as NUL, slash, or quotes, leading to security vulnerabilities. RFC 3629 states "Implementations of the decoding algorithm MUST protect against decoding invalid sequences." The Unicode Standard requires decoders to: "... treat any ill-formed code unit sequence as an error condition. This guarantees that it will neither interpret nor emit an ill-formed code unit sequence."
+It was common to throw an exception or truncate the string at an error but this turns what would otherwise be harmless errors (i.e. "file not found") into a denial of service, for instance early versions of Python 3.0 would exit immediately if the command line or environment variables contained invalid UTF-8. Most code now replaces each error with a single code point (such as U+FFFD � REPLACEMENT CHARACTER) and continue decoding.
+Some decoders consider the sequence E1,A0,20 (a truncated 3-byte code followed by a space) as a single error. This is not a good idea as a search for a space character would find the one hidden in the error. Since Unicode 6 (October 2010) the standard (chapter 3) has recommended a "best practice" where the error is either one continuation byte, or ends at the first byte that is disallowed, so E1,A0,20 is a two-byte error followed by a space. An error is no more than three bytes long, never contains the start of a valid character, and there are 21,952 different possible errors. Many decoders instead make each byte be an error, in which case E1,A0,20 is two errors followed by a space; there are now only 128 different errors which makes it practical to store the errors in the output string, or replace them with characters from a legacy encoding.
+Only a small subset of possible byte strings are error-free UTF-8: several bytes cannot appear, a byte with the high bit set cannot be alone, and in a truly random string a byte with a high bit set has only a 1⁄15 chance of starting a valid UTF-8 character. This has the consequence of making it easy to detect if a legacy text encoding is accidentally used instead of UTF-8, making conversion of a system to UTF-8 easier and avoiding the need to require a Byte Order Mark or any other metadata.
+
+
+=== Surrogates ===
+
+Since RFC 3629 (November 2003), the high and low surrogates used by UTF-16 (U+D800 through U+DFFF) are not legal Unicode values, and their UTF-8 encodings must be treated as an invalid byte sequence. These encodings all start with 0xED followed by 0xA0 or higher. This rule is often ignored as surrogates are allowed in Windows filenames and this means there must be a way to store them in a string. UTF-8 that allows these surrogate halves has been (informally) called WTF-8, for "wobbly transformation format", while another variation that also encodes all non-BMP characters as two surrogates (six bytes instead of four) is called CESU-8.
+
+
+=== Byte map ===
+The chart below gives the detailed meaning of each byte in a stream encoded in UTF-8.
+
+
+=== Byte-order mark ===
+If the Unicode byte-order mark U+FEFF is at the start of a UTF-8 file, the first three bytes will be 0xEF, 0xBB, 0xBF.
+The Unicode Standard neither requires nor recommends the use of the BOM for UTF-8, but warns that it may be encountered at the start of a file trans-coded from another encoding. While ASCII text encoded using UTF-8 is backward compatible with ASCII, this is not true when Unicode Standard recommendations are ignored and a BOM is added. A BOM can confuse software that is not prepared for it but can otherwise accept UTF-8, e.g. programming languages that permit non-ASCII bytes in string literals but not at the start of the file. Nevertheless, there was and still is software that always inserts a BOM when writing UTF-8, and refuses to correctly interpret UTF-8 unless the first character is a BOM (or the file only contains ASCII).
+
+
+== Comparison to UTF-16 ==
+
+For a long time there was considerable argument as to whether it was better to process text in UTF-16 or in UTF-8. The primary advantage of UTF-16 is that the Windows API required it for access to all Unicode characters (UTF-8 was not fully supported in Windows until May 2019). This caused several libraries such as Qt to also use UTF-16 strings which propagates this requirement to non-Windows platforms.
+In the early days of Unicode, there were no characters greater than U+FFFF and combining characters were rarely used, so the 16-bit encoding was effectively fixed-size. Some believed fixed-size encoding could make processing more efficient, but any such advantages were lost as soon as UTF-16 became variable width as well.
+The code points U+0800–U+FFFF take three bytes in UTF-8 but only two in UTF-16. This led to the idea that text in Chinese and other languages would take more space in UTF-8. However, text is only larger if there are more of these code points than one-byte ASCII code points, and this rarely happens in real-world documents due to markup, along with spaces, newlines, digits, punctuation, English words, etc.
+UTF-8 has the advantages of being trivial to retrofit to any system that could handle an extended ASCII, not having byte-order problems, and taking about half the space for any language using mostly Latin letters.
+
+
+== Implementations and adoption ==
+
+UTF-8 has been the most common encoding for the World Wide Web since 2008. As of September 2026, UTF-8 is used by 99.1% of surveyed  websites. Although many pages only use ASCII characters to display content, very few websites now declare their encoding to only be ASCII instead of UTF-8. Virtually all countries and  languages have 95% or more use of UTF-8 encodings on the web. 
+Many standards only support UTF-8, e.g. JSON exchange requires it. UTF-8 is also required by the WHATWG for HTML and DOM specifications, which states "UTF-8 encoding is the most appropriate encoding for interchange of Unicode", and the Internet Mail Consortium recommends that all e‑mail programs be able to display and create mail using UTF-8. The World Wide Web Consortium recommends UTF-8 as the default encoding in XML and HTML (and not just using UTF-8, also declaring it in metadata), "even when all characters are in the ASCII range ... Using non-UTF-8 encodings can have unexpected results". Version 5.3 of the W3C HTML specification and the current Living Standard by WHATWG both require UTF-8.
+Many software programs have the ability to read/write UTF-8. It may require the user to change options from the normal settings, or may require a BOM (byte-order mark) as the first character to read the file. Examples of software supporting UTF-8 include Microsoft Word, Microsoft Excel (Office 2003 and later), Google Drive, LibreOffice, and most databases.
+Software that "defaults" to UTF-8 (meaning it writes it without the user changing settings, and it reads it without a BOM) has become more common since 2010. Windows Notepad, in all currently supported versions of Windows, defaults to writing UTF-8 without a BOM (a change from Windows 7 Notepad), bringing it into line with most other text editors. Some system files on Windows 11 require UTF-8 with no requirement for a BOM, and almost all files on macOS and most Linux distributions are required to be UTF-8 without a BOM. Programming languages that default to UTF-8 for I/O include Ruby 3.0, R 4.2.2, Raku and Java 18 (thus also Java 21 LTS). Python since 3.15 makes UTF-8 the default for I/O; previous versions require an option to open() to read/write UTF-8. C++23 adopted UTF-8 as the only portable source code file format.
+Backwards compatibility is a serious impediment to changing code and APIs using UTF-16 to use UTF-8, but this is happening. In May 2019, Microsoft added the capability for an application to set UTF-8 as the "code page" for the Windows API, removing the need to use UTF-16; and more recently has recommended programmers use UTF-8, and even states "UTF-16 [...] is a unique burden that Windows places on code that targets multiple platforms". The default string primitive in Go, Julia, Rust, Swift (since version 5), and PyPy uses UTF-8 internally in all cases. Python (since version 3.3) uses UTF-8 internally for Python C API extensions and sometimes for strings and a future version of Python is planned to store strings as UTF-8 by default. Modern versions of Microsoft Visual Studio use UTF-8 internally. All currently supported versions of Microsoft SQL Server  support UTF-8 for importing and exporting, and in addition all on mainstream support, i.e. since SQL Server 2019, support UTF-8 internally, and using it results in a 35% speed increase, and "nearly 50% reduction in storage requirements".
+Java internally uses UTF-16 for the char data type and, consequentially, the Character, String, and StringBuffer classes, but for I/O uses "Modified UTF-8", which is the same as CESU-8, except the null character U+0000 uses the two-byte overlong encoding 0xC0 0x80 instead of just 0x00. Modified UTF-8 strings never contain any actual null bytes but can contain all Unicode code points including U+0000, which allows such strings (with a null byte appended) to be processed by traditional null-terminated string functions. Java reads and writes normal UTF-8 to files and streams, but it uses Modified UTF-8 for object serialization, for the Java Native Interface, and for embedding constant strings in Java class files. The dex format used by Android apps (defined by Dalvik) also uses the same modified UTF-8 to represent string values. Tcl also uses the same modified UTF-8 as Java for internal representation of Unicode data, but uses strict CESU-8 for external data.
+The Raku programming language (formerly Perl 6) uses utf-8 encoding by default for I/O (Perl 5 also supports it); though that choice in Raku also implies "normalization into Unicode NFC (normalization form canonical). In some cases the user will want to ensure no normalization is done; for this "utf8-c8" can be used. That UTF-8 Clean-8 variant, implemented by Raku, is an encoder/decoder  that preserves bytes as is (even illegal UTF-8 sequences) and allows for Normal Form Grapheme synthetics.
+Version 3 of the Python programming language treats each byte of an invalid UTF-8 bytestream as an error (see also changes with new UTF-8 mode in Python 3.7); this gives 128 different possible errors. Extensions have been created to allow any byte sequence that is assumed to be UTF-8 to be losslessly transformed to UTF-16 or UTF-32, by translating the 128 possible error bytes to 128 reserved code points, and transforming those code points back to error bytes to output UTF-8. The most common approach is to translate the codes to U+DC80...U+DCFF which are low (trailing) surrogate values and thus "invalid" UTF-16, as used by Python's PEP 383 (or "surrogateescape") approach. NumPy version 2.0, and its file formats, support UTF-8 (adding StringDType for it). Another encoding called MirBSD OPTU-8/16 converts them to U+EF80...U+EFFF in a Private Use Area. In either approach, the byte value is encoded in the low eight bits of the output code point. These encodings are needed if invalid UTF-8 is to survive translation to and then back from the UTF-16 used internally by Python, and as Unix filenames can contain invalid UTF-8 it is necessary for this to work.
+Most file systems on Unix-like systems can use UTF-8 to encode file names, as looking up file names is done by comparing the bytes of file names. Linux's ext4 and macOS's APFS file systems support case-insensitive file name lookups, which require that the encoding of file names be specified; ext4 supports UTF-8 and uses it by default, and APFS requires UTF-8. Apple's older HFS Plus uses UTF-16 for file names, but uses UTF-8 in symbolic links. Windows' filesystem, NTFS, uses UTF-16 for file names.
+
+
+== Standards ==
+The official name for the encoding is UTF-8, the spelling used in all Unicode Consortium documents. The hyphen-minus is required and no spaces are allowed. Some other names used are:
+
+Many standards are case-insensitive and utf-8 is often used.
+Web standards (which include CSS, HTML, XML, and HTTP headers) also allow utf8 and many other aliases. HTML documents, however, must have their encoding specified as "an ASCII case-insensitive match for the string 'utf-8'".
+The official Internet Assigned Numbers Authority lists csUTF8 as the only alias, which is rarely used.
+In some locales UTF-8N means UTF-8 without a byte-order mark (BOM), and in this case UTF-8 may imply there is a BOM.
+In Windows, UTF-8 is codepage 65001 with the symbolic name CP_UTF8 in source code.
+In MySQL, UTF-8 is called utf8mb4, while utf8 and utf8mb3 refer to the obsolete CESU-8 variant.
+In Oracle Database, AL32UTF8 means UTF-8 (since version 9.0), while UTF8 means CESU-8 (since 8.0), and is not recommended for use.
+In HP PCL, the Symbol-ID for UTF-8 is 18N.
+There are several current definitions of UTF-8 in various standards documents:
+
+RFC 3629 / STD 63 (2003), which establishes UTF-8 as a standard internet protocol element
+RFC 5198 defines UTF-8 NFC for Network Interchange (2008)
+ISO/IEC 10646:2020/Amd 1:2023
+The Unicode Standard, Version 17.0.0 (2025)
+They supersede the definitions given in the following obsolete works:
+
+The Unicode Standard, Version 2.0, Appendix A (1996)
+ISO/IEC 10646-1:1993 Amendment 2 / Annex R (1996)
+RFC 2044 (1996)
+RFC 2279 (1998)
+The Unicode Standard, Version 3.0, §2.3 (2000) plus Corrigendum #1 : UTF-8 Shortest Form (2000)
+Unicode Standard Annex #27: Unicode 3.1 (2001)
+The Unicode Standard, Version 5.0 (2006)
+The Unicode Standard, Version 6.0 (2010)
+They are all the same in their general mechanics, with the main differences being on issues such as allowed range of code point values and safe handling of invalid input.
+
+
+== See also ==
+Character encodings in HTML – Use of encoding systems for international characters in HTML
+Comparison of Unicode encodings
+GB 18030 – Official Chinese character encoding
+Iconv – Standard UNIX utility
+Unicode and email – Relationship between Unicode and email
+Unicode and HTML – Relationship between Unicode characters and HTML
+UTF-EBCDIC – Character encoding for Unicode compatible with EBCDIC
+List of Unicode characters
+
+
+== References ==
+
+
+== External links ==
+Original UTF-8 paper (or pdf) for Plan 9 from Bell Labs
+History of UTF-8 by Rob Pike
+Characters, Symbols and the Unicode Miracle on YouTube
+
+C (programming language)
+C is a general-purpose programming language created in 1972 by Dennis Ritchie. By design, C gives programmers relatively direct access to the features of typical CPU architectures, customized for the target instruction set. It has been and continues to be used to implement operating systems (especially kernels), device drivers, and protocol stacks, though its use in application software is decreasing. C is used on computers ranging from supercomputers to microcontrollers and embedded systems.
+C was initially developed as a successor to the B programming language at Bell Labs by Ritchie between 1972 and 1973. Its initial purpose was to construct utilities running on Unix, and was later applied to re-implementing the kernel of the Unix operating system. During the 1980s, C gradually gained popularity, leading to it becoming one of the most widely used programming languages, with C compilers available for practically all modern computer architectures and operating systems. The book The C Programming Language, co-authored by the original language designer, served for many years as the de facto standard for the language. C has been standardized since 1989 by the American National Standards Institute (ANSI) and, subsequently, jointly by the International Organization for Standardization (ISO) and the International Electrotechnical Commission (IEC).
+C is an imperative procedural language, supporting structured programming, lexical variable scope, and recursion, with a static type system. It was designed to be compiled to provide low-level access to memory and language constructs that map efficiently to machine instructions, all with minimal runtime support. Despite its low-level capabilities, the language was designed to encourage cross-platform programming. A standards-compliant C program written with portability in mind can be compiled for a wide variety of computer platforms and operating systems with few changes to its source code.
+Although neither C nor its standard library provide some popular features found in other languages, it is flexible enough to support them. For example, object orientation and garbage collection are provided by external libraries GLib Object System and Boehm garbage collector, respectively.
+Since 2000, C has typically ranked as the most or second-most popular language in the TIOBE index.
+
+
+== Characteristics ==
+
+C is an imperative, procedural language with a free-form source layout. Statements are terminated by semicolons and grouped into blocks using curly braces. All executable code is contained in functions rather than top-level statements. The language has a relatively small number of keywords, and user-defined identifiers are not distinguished from keywords by any sigil.
+Parameters are passed by value; pass-by-reference is achieved with pointers. A function's return value may be ignored, and while a function cannot normally be nested inside another function, some translators support this. C supports recursion, and run-time polymorphism may be achieved using function pointers. Control flow is provided through constructs such as if, for, do, while, and switch. The language offers arithmetic; bitwise; and logical operators including +, +=, ++, &, ||, and multiple assignments may be performed in a single statement. A variable declared inside a block is accessible only within that block and only below its declaration.
+Data typing is weakly enforced and static, with implicit conversion between primitive types. User-defined types allow aliasing of type specifiers. Arrays are defined and accessed with square-bracket notation, for example v[3]. User-defined structure types let related data elements be passed and copied as a unit, though two structures cannot be compared without custom code to compare each field. Unions support overlapping members, allowing multiple data types to share the same memory location, and enumeration types support aliasing integer values. C lacks a dedicated string type but provides syntax for null-terminated strings, with associated handling in its standard library.
+The language supports low-level access to computer memory via pointers, procedure-like constructs in the form of functions returning void, and dynamic memory allocation through standard library functions. It includes the C preprocessor for macro definition, source-file inclusion, and conditional compilation. Modularity is supported by processing files separately, with visibility controlled through the static and extern attributes. Functionality is minimized in the core language, with relatively complex features such as I/O, string manipulation, and mathematical functions being provided through standard libraries. The resulting compiled code has relatively straightforward requirements of the underlying platform, making C desirable for operating and embedded systems.
+
+
+== "Hello, world" example ==
+
+The "Hello, World!" program example that appeared in the first edition of K&R has become the model for an introductory program in most programming textbooks. The program prints "hello, world" to the standard output.
+The original version was:
+
+A more modern version is:
+
+The first line is a preprocessor directive, indicated by #include, which causes the preprocessor to replace that line of code with the text of the stdio.h header file, which contains declarations for input and output functions including printf. The angle brackets around stdio.h indicate that the header file can be located using a search strategy that selects header files provided with the compiler over files with the same name that may be found in project-specific directories.
+The next code line declares the entry point function main. The run-time environment calls this function to begin program execution. The type specifier int indicates that the function returns an integer value. The void parameter list indicates that the function consumes no arguments. The run-time environment actually passes two arguments (typed int and char *[]), but this implementation ignores them. The ISO C standard (section 5.1.2.2.1) requires syntax that either is void or these two arguments – a special treatment not afforded to other functions.
+The opening curly brace indicates the beginning of the code that defines the function.
+The next line of code calls (diverts execution to) the C standard library function printf with the address of the first character of a null-terminated string specified as a string literal. The text \n is an escape sequence that denotes the newline character which when output in a terminal results in moving the cursor to the beginning of the next line. Even though printf returns an int value, it is silently discarded. The semicolon ; terminates the call statement.
+The closing curly brace indicates the end of the main function. Prior to C99, an explicit return 0; statement was required at the end of main function, but since C99, the main function (as being the initial function call) implicitly returns 0 upon reaching its final closing curly brace.
+
+
+== History ==
+
+
+=== Early developments ===
+
+The origin of C is closely tied to the development of the Unix operating system. Unix was originally implemented in assembly language on a PDP-7 by Dennis Ritchie and Ken Thompson, incorporating several ideas from colleagues. Eventually, they decided to port the operating system to a PDP-11. The original PDP-11 version of Unix was also developed in assembly language.
+
+
+==== B ====
+
+Thompson wanted a programming language for developing utilities for the new platform. He first tried writing a Fortran compiler, but he soon gave up the idea and instead created a cut-down version of the recently developed systems programming language called BCPL. The official description of BCPL was not available at the time, and Thompson modified the syntax to be less 'wordy' and similar to a simplified ALGOL known as SMALGOL. He called the result B, describing it as "BCPL semantics with a lot of SMALGOL syntax". Like BCPL, B had a bootstrapping compiler to facilitate porting to new machines. Ultimately, few utilities were written in B because it was too slow and could not take advantage of PDP-11 features such as byte addressability.
+Unlike BCPL's // comment marking comments up to the end of the line, B adopted /* comment */ as the comment delimiter, more akin to PL/1, and allowing comments to appear in the middle of lines. (BCPL's comment style would be reintroduced in C++.)
+
+
+==== New B and first C release ====
+In 1971, Ritchie started to improve B, to use the features of the more-powerful PDP-11. A significant addition was a character data type. He called this New B (NB). Thompson started to use NB to write the Unix kernel, and his requirements shaped the direction of the language development.
+Through to 1972, richer types were added to the NB language. NB had arrays of int and char, and to these types were added pointers, the ability to generate pointers to other types, arrays of all types, and types to be returned from functions. Arrays within expressions were effectively treated as pointers. A new compiler was written, and the language was renamed C.
+The C compiler and some utilities made with it were included in Version 2 Unix, which is also known as Research Unix.
+
+
+==== Structures and Unix kernel re-write ====
+At Version 4 Unix, released in November 1973, the Unix kernel was extensively re-implemented in C. By this time, the C language had acquired some powerful features such as struct types.
+The preprocessor was introduced around 1973 at the urging of Alan Snyder and also in recognition of the usefulness of the file-inclusion mechanisms available in BCPL and PL/I. Its original version provided only included files and simple string replacements: #include and #define of parameterless macros. Soon after that, it was extended, mostly by Mike Lesk and then by John Reiser, to incorporate macros with arguments and conditional compilation.
+Unix was one of the first operating system kernels implemented in a language other than assembly. Earlier instances include the Multics system (which was written in PL/I) and Master Control Program (MCP) for the Burroughs B5000 (which was written in ALGOL) in 1961. In and around 1977, Ritchie and Stephen C. Johnson made further changes to the language to facilitate portability of the Unix operating system. Johnson's Portable C Compiler served as the basis for several implementations of C on new platforms.
+
+
+=== K&R C ===
+
+In 1978, Brian Kernighan and Dennis Ritchie published the first edition of The C Programming Language. Known as K&R from the initials of its authors, the book served for many years as an informal specification of the language. The version of C that it describes is commonly referred to as "K&R C". As this was released in 1978, it is now also referred to as C78. The second edition of the book covers the later ANSI C standard, described below.
+K&R introduced several language features:
+
+Standard I/O library
+long int data type
+unsigned int data type
+Compound assignment operators of the form =op (such as =-) were changed to the form op= (that is, -=) to remove the semantic ambiguity created by constructs such as i=-10, which had been interpreted as i =- 10 (decrement i by 10) instead of the possibly intended i = -10 (let i be −10).
+Even after the publication of the 1989 ANSI standard, for many years K&R C was still considered the "lowest common denominator" to which C programmers restricted themselves when maximum portability was desired, since many older compilers were still in use, and because carefully written K&R C code can be legal Standard C as well.
+Although later versions of C require functions to have an explicit type declaration, K&R C only requires functions that return a type other than int to be declared before use. Functions used without prior declaration were presumed to return int.
+For example:
+
+The declaration of long_function() (on line 1) is required since it returns long; not int. Function int_function can be called (line 11) even though it is not declared since it returns int. Also, variable intvar does not need to be declared as type int since that is the default type for register keyword.
+Since function declarations did not include information about arguments, type checks were not performed, although some compilers would issue a warning if different calls to a function used different numbers or types of arguments. Tools such as Unix's lint utility were developed to among other things check for consistency of function use across multiple source files.
+In the years following the publication of K&R C, several features were added to the language, supported by compilers from AT&T (in particular PCC) and other vendors. These included:
+
+void functions; functions returning no value
+Functions returning struct or union types
+Assignment for struct variables
+Enumerated types
+The popularity of the language, lack of agreement on standard library interfaces, and lack of compliance to the K&R specification, led to standardization efforts.
+
+
+=== ANSI C and ISO C ===
+
+During the late 1970s and 1980s, versions of C were implemented for a wide variety of mainframe computers, minicomputers, and microcomputers, including the IBM PC, as its popularity increased significantly.
+In 1983 the American National Standards Institute (ANSI) formed a committee, X3J11, to establish a standard specification of C. X3J11 based the C standard on the Unix implementation; however, the non-portable portion of the Unix C library was handed off to the IEEE working group 1003 to become the basis for the 1988 POSIX standard. In 1989, the C standard was ratified as ANSI X3.159-1989 "Programming Language C". This version of the language is often referred to as ANSI C, Standard C, or sometimes C89.
+In 1990 the ANSI C standard (with formatting changes) was adopted by the International Organization for Standardization (ISO) as ISO/IEC 9899:1990, which is sometimes called C90. Therefore, the terms "C89" and "C90" refer to the same programming language.
+ANSI, like other national standards bodies, no longer develops the C standard independently, but defers to the international C standard, maintained by the working group ISO/IEC JTC1/SC22/WG14. National adoption of an update to the international standard typically occurs within a year of ISO publication.
+One of the aims of the C standardization process was to produce a superset of K&R C, incorporating many of the subsequently introduced unofficial features. The standards committee also included several additional features such as function prototypes (borrowed from C++), void pointers, support for international character sets and locales, and preprocessor enhancements. Although the syntax for parameter declarations was augmented to include the style used in C++, the K&R interface continued to be permitted, for compatibility with existing source code.
+C89 is supported by current C compilers, and most modern C code is based on it. Any program written only in Standard C and without any hardware-dependent assumptions will run correctly on any platform with a conforming C implementation, within its resource limits. Without such precautions, programs may compile only on a certain platform or with a particular compiler, due, for example, to the use of non-standard libraries, such as GUI libraries, or to a reliance on compiler- or platform-specific attributes such as the exact size of data types and byte endianness.
+In cases where code must be compilable by either standard-conforming or K&R C-based compilers, the __STDC__ macro can be used to split the code into Standard and K&R sections to prevent the use on a K&R C-based compiler of features available only in Standard C.
+After the ANSI/ISO standardization process, the C language specification remained relatively static for several years. In 1995, Normative Amendment 1 to the 1990 C standard (ISO/IEC 9899/AMD1:1995, known informally as C95) was published, to correct some details and to add more extensive support for international character sets.
+
+
+=== C99 ===
+
+The C standard was further revised in the late 1990s, leading to the publication of ISO/IEC 9899:1999 in 1999, which is commonly referred to as "C99". It has since been amended three times by Technical Corrigenda.
+C99 introduced several new features, including inline functions, several new data types (including long long int and a complex type to represent complex numbers), variable-length arrays and flexible array members, improved support for IEEE 754 floating point, support for variadic macros (macros of variable arity), and support for one-line comments beginning with //, as in BCPL or C++. Many of these had already been implemented as extensions in several C compilers.
+C99 is for the most part backward compatible with C90, but is stricter in some ways; in particular, a declaration that lacks a type specifier no longer has int implicitly assumed. A standard macro __STDC_VERSION__ is defined with value 199901L to indicate that C99 support is available. GCC, Solaris Studio, and other C compilers now support many or all of the new features of C99. The C compiler in Microsoft Visual C++, however, implements the C89 standard and those parts of C99 that are required for compatibility with C++11.
+In addition, the C99 standard requires support for identifiers using Unicode in the form of escaped characters (e.g. \u0040 or \U0001f431) and suggests support for raw Unicode names.
+
+
+=== C11 ===
+
+Work began in 2007 on another revision of the C standard, informally called "C1X" until its official publication of ISO/IEC 9899:2011 on December 8, 2011. The C standards committee adopted guidelines to limit the adoption of new features that had not been tested by existing implementations.
+The C11 standard adds numerous new features to C and the library, including type generic macros, anonymous structures, improved Unicode support, atomic operations, multi-threading, and bounds-checked functions. It also makes some portions of the existing C99 library optional, and improves compatibility with C++. The standard macro __STDC_VERSION__ is defined as 201112L to indicate that C11 support is available.
+
+
+=== C17 ===
+
+C17 is an informal name for ISO/IEC 9899:2018, a standard for the C programming language published in June 2018. It introduces no new language features, only technical corrections, and clarifications to defects in C11. The standard macro __STDC_VERSION__ is defined as 201710L to indicate that C17 support is available.
+
+
+=== C23 ===
+
+C23 is an informal name for the current major C language standard revision.  It was known as "C2X" through most of its development. It builds on past releases, introducing features like new keywords, additional meaning for auto to provide type inference when declaring variables, new types including nullptr_t and _BitInt(N), and expansions to the standard library.
+C23 was published in October 2024 as ISO/IEC 9899:2024. The standard macro __STDC_VERSION__ is defined as 202311L to indicate that C23 support is available.
+
+
+=== C29 ===
+
+C29 (C2Y) are informal names for the next major C language standard revision, after C23 (C2X), that is hoped to be released no later in the 2020s, hence the '2' in "C2Y". An early working draft of C2Y was released in February 2024 as N3220 by the working group ISO/IEC JTC1/SC22/WG14.
+
+
+=== Embedded C ===
+
+Historically, embedded C programming requires non-standard extensions to the C language to support exotic features such as fixed-point arithmetic, multiple distinct memory banks, and basic I/O operations.
+In 2008, the C Standards Committee published a technical report extending the C language to address these issues by providing a common standard for all implementations to adhere to. It includes a number of features not available in normal C, such as fixed-point arithmetic, named address spaces, and basic I/O hardware addressing.
+
+
+== Definition ==
+
+C has a formal grammar specified by the C standard. Line endings are generally not significant in C; however, line boundaries do have significance during the preprocessing phase. Comments may appear either between the delimiters /* and */, or (since C99) following // until the end of the line. Comments delimited by /* and */ do not nest, and these sequences of characters are not interpreted as comment delimiters if they appear inside string or character literals.
+C source files contain declarations and function definitions. Function definitions, in turn, contain declarations and statements. Declarations either define new types using keywords such as struct, union, and enum, or assign types to and perhaps reserve storage for new variables, usually by writing the type followed by the variable name. Keywords such as char and int specify built-in types. Sections of code are enclosed in braces ({ and }, sometimes called "curly brackets") to limit the scope of declarations and to act as a single statement for control structures.
+As an imperative language, C uses statements to specify actions. The most common statement is an expression statement, consisting of an expression to be evaluated, followed by a semicolon; as a side effect of the evaluation, functions may be called and variables assigned new values. To modify the normal sequential execution of statements, C provides several control-flow statements identified by reserved keywords. Structured programming is supported by if ... [else] conditional execution and by do ... while, while, and for iterative execution (looping). The for statement has separate initialization, testing, and reinitialization expressions, any or all of which can be omitted. break and continue can be used within the loop. Break is used to leave the innermost enclosing loop statement and continue is used to skip to its reinitialisation. There is also a non-structured goto statement, which branches directly to the designated label within the function. switch selects a case to be executed based on the value of an integer expression. Different from many other languages, control-flow will fall through to the next case unless terminated by a break.
+Expressions can use a variety of built-in operators and may contain function calls. The order in which arguments to functions and operands to most operators are evaluated is unspecified. The evaluations may even be interleaved. However, all side effects (including storage to variables) will occur before the next "sequence point"; sequence points include the end of each expression statement, and the entry to and return from each function call. Sequence points also occur during evaluation of expressions containing certain operators (&&, ||, ?: and the comma operator). This permits a high degree of object code optimization by the compiler, but requires C programmers to take more care to obtain reliable results than is needed for other programming languages.
+Kernighan and Ritchie say in the Introduction of The C Programming Language: "C, like any other language, has its blemishes. Some of the operators have the wrong precedence; some parts of the syntax could be better." The C standard did not attempt to correct many of these blemishes, because of the impact of such changes on already existing software.
+
+
+=== Character set ===
+The basic C source character set includes the following characters:
+
+Lowercase and uppercase letters of the ISO basic Latin alphabet: a–z, A–Z
+Decimal digits: 0–9
+Graphic characters: ! " # % & ' ( ) * + , - . / : ; < = > ? [ \ ] ^ _ { | } ~
+Whitespace characters: space, horizontal tab, vertical tab, form feed, newline
+The newline character indicates the end of a text line; it need not correspond to an actual single character, although for convenience C treats it as such.
+The POSIX standard mandates a portable character set which adds a few characters (notably "@") to the basic C source character set. Both standards do not prescribe any particular value encoding—ASCII and EBCDIC both comply with these standards, since they include at least those basic characters, even though they use different encoded values for those characters.
+Additional multi-byte encoded characters may be used in string literals, but they are not entirely portable. Since C99 multi-national Unicode characters can be embedded portably within C source text by using \uXXXX or \UXXXXXXXX encoding (where X denotes a hexadecimal character).
+The basic C execution character set contains the same characters, along with representations for the null character, alert, backspace, and carriage return.
+Run-time support for extended character sets has increased with each revision of the C standard.
+
+
+=== Reserved words ===
+All versions of C have reserved words that are case sensitive. As reserved words, they cannot be used for variable names.
+C89 has 32 reserved words:
+
+C99 added five more reserved words: (‡ indicates an alternative spelling alias for a C23 keyword)
+
+C11 added seven more reserved words: (‡ indicates an alternative spelling alias for a C23 keyword)
+
+C23 reserved fifteen more words:
+
+Most of the recently reserved words begin with an underscore followed by a capital letter, because identifiers of that form were previously reserved by the C standard for use only by implementations. Since existing program source code should not have been using these identifiers, it would not be affected when C implementations started supporting these extensions to the programming language. Some standard headers do define more convenient synonyms for underscored identifiers. Some of those words were added as keywords with their conventional spelling in C23 and the corresponding macros were removed.
+Prior to C89, entry was reserved as a keyword. In the second edition of their book The C Programming Language, which describes what became known as C89, Kernighan and Ritchie wrote, "The ... [keyword] entry, formerly reserved but never used, is no longer reserved." and "The stillborn entry keyword is withdrawn."
+
+
+=== Operators ===
+
+C supports a rich set of operators, which are symbols used within an expression to specify the manipulations to be performed while evaluating that expression. C has operators for:
+
+arithmetic: +, -, *, /, %
+assignment: =
+augmented assignment: +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=
+bitwise logic: ~, &, |, ^
+bitwise shifts: <<, >>
+Boolean logic: !, &&, ||
+conditional evaluation: ? :
+equality testing: ==, !=
+calling functions: ( )
+increment and decrement: ++, --
+member selection: ., ->
+object size: sizeof
+type: typeof, typeof_unqual since C23
+order relations: <, <=, >, >=
+reference and dereference: &, *, [ ]
+sequencing: ,
+subexpression grouping: ( )
+type conversion: (typename)
+C uses the operator = (used in mathematics to express equality) to indicate assignment, following the precedent of Fortran and PL/I, but unlike ALGOL and its derivatives. C uses the operator == to test for equality. The similarity between the operators for assignment and equality may result in the accidental use of one in place of the other, and in many cases the mistake does not produce an error message (although some compilers produce warnings). For example, the conditional expression if (a == b + 1) might mistakenly be written as if (a = b + 1), which will be evaluated as true unless the value of a is 0 after the assignment.
+The C operator precedence is not always intuitive. For example, the operator == binds more tightly than (is executed prior to) the operators & (bitwise AND) and | (bitwise OR) in expressions such as x & 1 == 0, which must be written as (x & 1) == 0 if that is the coder's intent.
+
+
+=== Data types ===
+
+The type system in C is static and weakly typed, which makes it similar to the type system of ALGOL descendants such as Pascal. There are built-in types for integers of various sizes, both signed and unsigned, floating-point numbers, and enumerated types (enum). Integer type char is often used for single-byte characters. C99 added a Boolean data type. There are also derived types including arrays, pointers, records (struct), and unions (union).
+C is often used in low-level systems programming where escapes from the type system may be necessary. The compiler attempts to ensure type correctness of most expressions, but the programmer can override the checks in various ways, either by using a type cast to explicitly convert a value from one type to another, or by using pointers or unions to reinterpret the underlying bits of a data object in some other way.
+Some find C's declaration syntax unintuitive, particularly for function pointers. (Ritchie's idea was to declare identifiers in contexts resembling their use: "declaration reflects use".)
+C's usual arithmetic conversions allow for efficient code to be generated, but can sometimes produce unexpected results. For example, a comparison of signed and unsigned integers of equal width requires a conversion of the signed value to unsigned. This can generate unexpected results if the signed value is negative.
+
+
+==== Pointers ====
+C supports the use of pointers, a type of reference that records the address or location of an object or function in memory. Pointers can be dereferenced to access data stored at the address pointed to, or to invoke a pointed-to function. Pointers can be manipulated using assignment or pointer arithmetic. The run-time representation of a pointer value is typically a raw memory address (perhaps augmented by an offset-within-word field), but since a pointer's type includes the type of the thing pointed to, expressions including pointers can be type-checked at compile time. Pointer arithmetic is automatically scaled by the size of the pointed-to data type.
+Pointers are used for many purposes in C. Text strings are commonly manipulated using pointers into arrays of characters. Dynamic memory allocation is performed using pointers; the result of a malloc is usually cast to the data type of the data to be stored. Many data types, such as trees, are commonly implemented as dynamically allocated struct objects linked together using pointers. Pointers to other pointers are often used in multi-dimensional arrays and arrays of struct objects. Pointers to functions (function pointers) are useful for passing functions as arguments to higher-order functions (such as qsort or bsearch), in dispatch tables, or as callbacks to event handlers.
+A null pointer value explicitly points to no valid location. Dereferencing a null pointer value is undefined, often resulting in a segmentation fault. Null pointer values are useful for indicating special cases such as no "next" pointer in the final node of a linked list, or as an error indication from functions returning pointers. In appropriate contexts in source code, such as for assigning to a pointer variable, a null pointer constant can be written as 0, with or without explicit casting to a pointer type, as the NULL macro defined by several standard headers or, since C23 with the constant nullptr. In conditional contexts, null pointer values evaluate to false, while all other pointer values evaluate to true.
+Void pointers (void *) point to objects of unspecified type, and can therefore be used as "generic" data pointers. Since the size and type of the pointed-to object is not known, void pointers cannot be dereferenced, nor is pointer arithmetic on them allowed, although they can easily be (and in many contexts implicitly are) converted to and from any other object pointer type.
+Careless use of pointers is potentially dangerous. Because they are typically unchecked, a pointer variable can be made to point to any arbitrary location, which can cause undesirable effects. Although properly used pointers point to safe places, they can be made to point to unsafe places by using invalid pointer arithmetic; the objects they point to may continue to be used after deallocation (dangling pointers); they may be used without having been initialized (wild pointers); or they may be directly assigned an unsafe value using a cast, union, or through another corrupt pointer. In general, C is permissive in allowing manipulation of and conversion between pointer types, although compilers typically provide options for various levels of checking. Some other programming languages address these problems by using more restrictive reference types.
+
+
+==== Arrays ====
+
+Array types in C are traditionally of a fixed, static size specified at compile time. The more recent C99 standard also allows a form of variable-length arrays. However, it is also possible to allocate a block of memory (of arbitrary size) at run time, using the standard library's malloc function, and treat it as an array.
+Since arrays are always accessed (in effect) via pointers, array accesses are typically not checked against the underlying array size, although some compilers may provide bounds checking as an option. Array bounds violations are therefore possible and can lead to various repercussions, including illegal memory accesses, corruption of data, buffer overflows, and run-time exceptions.
+C does not have a special provision for declaring multi-dimensional arrays, but rather relies on recursion within the type system to declare arrays of arrays, which effectively accomplishes the same thing. The index values of the resulting "multi-dimensional array" can be thought of as increasing in row-major order. Multi-dimensional arrays are commonly used in numerical algorithms (mainly from applied linear algebra) to store matrices. The structure of the C array is well suited to this particular task. However, in early versions of C the bounds of the array must be known fixed values or else explicitly passed to any subroutine that requires them, and dynamically sized arrays of arrays cannot be accessed using double indexing. (A workaround for this was to allocate the array with an additional "row vector" of pointers to the columns.) C99 introduced "variable-length arrays" which address this issue.
+The following example using modern C (C99 or later) shows allocation of a two-dimensional array on the heap and the use of multi-dimensional array indexing for accesses (which can use bounds-checking on many C compilers):
+
+And here is a similar implementation using C99's Auto VLA feature:
+
+
+==== Array–pointer interchangeability ====
+The subscript notation x[i] (where x designates a pointer) is syntactic sugar for *(x+i). Taking advantage of the compiler's knowledge of the pointer type, the address that x + i points to is not the base address (pointed to by x) incremented by i bytes, but rather is defined to be the base address incremented by i multiplied by the size of an element that x points to. Thus, x[i] designates the i+1th element of the array.
+Furthermore, in most expression contexts (a notable exception is as operand of sizeof), an expression of array type is automatically converted to a pointer to the array's first element. This implies that an array is never copied as a whole when named as an argument to a function, but rather only the address of its first element is passed. Therefore, although function calls in C use pass-by-value semantics, arrays are in effect passed by reference.
+The total size of an array x can be determined by applying sizeof to an expression of array type. The size of an element can be determined by applying the operator sizeof to any dereferenced element of an array A, as in n = sizeof A[0]. Thus, the number of elements in a declared array A can be determined as sizeof A / sizeof A[0]. Note, that if only a pointer to the first element is available as it is often the case in C code because of the automatic conversion described above, the information about the full type of the array and its length are lost.
+
+
+=== Memory management ===
+One of the most important functions of a programming language is to provide facilities for managing memory and the objects that are stored in memory. C provides three principal ways to allocate memory for objects:
+
+Static memory allocation: space for the object is provided in the binary at compile time; these objects have an extent (or lifetime) as long as the binary which contains them is loaded into memory.
+Automatic memory allocation: temporary objects can be stored on the stack, and this space is automatically freed and reusable after the block in which they are declared is exited.
+Dynamic memory allocation: blocks of memory of arbitrary size can be requested at run time using library functions such as malloc from a region of memory called the heap; these blocks persist until subsequently freed for reuse by calling the library function realloc or free.
+These three approaches are appropriate in different situations and have various trade-offs. For example, static memory allocation has little allocation overhead, automatic allocation may involve slightly more overhead, and dynamic memory allocation can potentially have a great deal of overhead for both allocation and deallocation. The persistent nature of static objects is useful for maintaining state information across function calls, automatic allocation is easy to use but stack space is typically much more limited and transient than either static memory or heap space, and dynamic memory allocation allows convenient allocation of objects whose size is known only at run time. Most C programs make extensive use of all three.
+Where possible, automatic or static allocation is usually simplest because the storage is managed by the compiler, freeing the programmer of the potentially error-prone chore of manually allocating and releasing storage. However, many data structures can change in size at run time, and since static allocations (and automatic allocations before C99) must have a fixed size at compile time, there are many situations in which dynamic allocation is necessary. Prior to the C99 standard, variable-sized arrays were a common example of this. (See the article on C dynamic memory allocation for an example of dynamically allocated arrays.) Unlike automatic allocation, which can fail at run time with uncontrolled consequences, the dynamic allocation functions return an indication (in the form of a null pointer value) when the required storage cannot be allocated. (Static allocation that is too large is usually detected by the linker or loader, before the program can even begin execution.)
+Unless otherwise specified, static objects contain zero or null pointer values upon program startup. Automatically and dynamically allocated objects are initialized only if an initial value is explicitly specified; otherwise they initially have indeterminate values (typically, whatever bit pattern happens to be present in the storage, which might not even represent a valid value for that type). If the program attempts to access an uninitialized value, the results are undefined. Many modern compilers try to detect and warn about this problem, but both false positives and false negatives can occur.
+Heap memory allocation has to be synchronized with its actual usage in any program to be reused as much as possible. For example, if the only pointer to a heap memory allocation goes out of scope or has its value overwritten before it is deallocated explicitly, then that memory cannot be recovered for later reuse and is essentially lost to the program, a phenomenon known as a memory leak. Conversely, it is possible for memory to be freed but referenced subsequently, leading to unpredictable results. Typically, the failure symptoms appear in a portion of the program unrelated to the code that causes the error, making it difficult to diagnose the failure. Such issues are ameliorated in languages with automatic garbage collection (though a Boehm garbage collector can be added to C; it can also be used as a memory leak detector).
+
+
+=== Libraries ===
+The C programming language uses libraries as its primary method of extension. In C, a library is a set of functions contained within a single "archive" file. Each library typically has a header file, which contains the prototypes of the functions contained within the library that may be used by a program, and declarations of special data types and macro symbols used with these functions. For a program to use a library, it must include the library's header file, and the library must be linked with the program, which in many cases requires compiler flags (e.g., -lm, shorthand for "link the math library").
+The most common C library is the C standard library, which is specified by the ISO and ANSI C standards and comes with every C implementation (implementations which target limited environments such as embedded systems may provide only a subset of the standard library). This library supports stream input and output, memory allocation, mathematics, character strings, and time values. Several separate standard headers (for example, stdio.h) specify the interfaces for these and other standard library facilities.
+Another common set of C library functions are those used by applications specifically targeted for Unix and Unix-like systems, especially functions which provide an interface to the kernel. These functions are detailed in various standards such as POSIX and the Single UNIX Specification.
+Since many programs have been written in C, there are a wide variety of other libraries available. Libraries are often written in C because C compilers generate efficient object code; programmers then create interfaces to the library so that the routines can be used from higher-level languages like Java, Perl, and Python.
+
+
+==== File handling and streams ====
+File input and output (I/O) is not part of the C language itself but instead is handled by libraries (such as the C standard library) and their associated header files (e.g. stdio.h). File handling is generally implemented through high-level I/O which works through streams. A stream is from this perspective a data flow that is independent of devices, while a file is a concrete device. The high-level I/O is done through the association of a stream to a file. In the C standard library, a buffer (a memory area or queue) is temporarily used to store data before it is sent to the final destination. This reduces the time spent waiting for slower devices, for example a hard drive or solid-state drive. Low-level I/O functions are not part of the standard C library but are generally part of "bare metal" programming (programming that is independent of any operating system such as most embedded programming). With few exceptions, implementations include low-level I/O.
+
+
+== Language tools ==
+
+A number of tools have been developed to help C programmers find and fix statements with undefined behavior or possibly erroneous expressions, with greater rigor than that provided by the compiler.
+Automated source code checking and auditing tools exist, such as Lint. A common practice is to use Lint to detect questionable code when a program is first written. Once a program passes Lint, it is then compiled using the C compiler. Also, many compilers can optionally warn about syntactically valid constructs that are likely to actually be errors. MISRA C is a proprietary set of guidelines to avoid such questionable code, developed for embedded systems.
+There are also compilers, libraries, and operating system level mechanisms for performing actions that are not a standard part of C, such as bounds checking for arrays, detection of buffer overflow, serialization, dynamic memory tracking, and automatic garbage collection.
+Memory management checking tools like Purify or Valgrind and linking with libraries containing special versions of the memory allocation functions can help uncover run-time errors in memory usage.
+
+
+== Uses ==
+C has been widely used to implement end-user and system-level applications.
+
+
+=== Rationale for use in systems programming ===
+
+C is widely used for systems programming in implementing operating systems and embedded system applications. This is for several reasons:
+
+The C language permits platform hardware and memory to be accessed with pointers and type punning, so system-specific features (e.g. Control/Status Registers, I/O registers) can be configured and used with code written in C – it allows fullest control of the platform it is running on.
+The code generated by compilation does not demand many system features, and can be invoked from some boot code in a straightforward manner – it is simple to execute.
+The C language statements and expressions typically map well to sequences of instructions for the target processor, and consequently there is a low run-time demand on system resources – it is fast to execute.
+With its rich set of operators, the C language can use many of the features of target CPUs. Where a particular CPU has more esoteric instructions, a language variant can be constructed with perhaps intrinsic functions to exploit those instructions – it can use practically all the target CPU's features.
+The language makes it easy to overlay structures onto blocks of binary data, allowing the data to be comprehended, navigated and modified – it can write data structures, even file systems.
+The language supports a rich set of operators, including bit manipulation, for integer arithmetic and logic, and perhaps different sizes of floating point numbers – it can process appropriately structured data effectively.
+C is a fairly small language, with only a handful of statements, and without too many features that generate extensive target code – it is comprehensible.
+C has direct control over memory allocation and deallocation, which gives reasonable efficiency and predictable timing to memory-handling operations, without any concerns for sporadic stop-the-world garbage collection events – it has predictable performance.
+C permits the use and implementation of different memory allocation schemes, including a typical malloc and free; a more sophisticated mechanism with arenas; or a version for an OS kernel that may suit DMA, use within interrupt handlers, or integrated with the virtual memory system.
+Depending on the linker and environment, C code can also call libraries written in assembly language, and may be called from assembly language – it interoperates well with other lower-level code.
+C and its calling conventions and linker structures are commonly used in conjunction with other high-level languages, with calls both to C and from C supported – it interoperates well with other high-level code.
+C has a mature and broad ecosystem, including libraries, frameworks, open source compilers, debuggers and utilities, and is the de facto standard. It is likely the drivers already exist in C, or that there is a similar CPU architecture as a back-end of a C compiler, so there is reduced incentive to choose another language.
+
+
+=== Games ===
+Computer games are often built from a combination of languages. C has featured significantly, especially for those games attempting to obtain best performance from computer platforms. Examples include Doom from 1993.
+
+
+=== World Wide Web ===
+Historically, C was sometimes used for web development using the Common Gateway Interface (CGI) as a "gateway" for information between the web application, the server, and the browser. C may have been chosen over interpreted languages because of its speed, stability, and near-universal availability. It is no longer common practice for web development to be done in C, and many other web development languages are popular. Applications where C-based web development continues include the HTTP configuration pages on routers, IoT devices and similar, although even here some projects have parts in higher-level languages e.g. the use of Lua within OpenWRT.
+Two popular web servers, Apache HTTP Server and nginx, are written in C. C's close-to-the-metal approach allows for the construction of these high-performance software systems.
+
+
+=== C as an intermediate language ===
+C is sometimes used as an intermediate language by implementations of other languages. This approach may be used for portability or convenience; by using C as an intermediate language, additional machine-specific code generators are not necessary. C has some features, such as line-number preprocessor directives and optional superfluous commas at the end of initializer lists, that support compilation of generated code. However, some of C's shortcomings have prompted the development of other C-based languages specifically designed for use as intermediate languages, such as C--. Also, contemporary major compilers GCC and LLVM both feature an intermediate representation that is not C, and those compilers support front ends for many languages including C.
+
+
+=== Computationally intensive libraries ===
+C enables programmers to create efficient implementations of algorithms and data structures, because the layer of abstraction from hardware is thin, and its overhead is low, an important criterion for computationally intensive programs. For example, the GNU Multiple Precision Arithmetic Library, the GNU Scientific Library, Mathematica, and MATLAB are completely or partially written in C. Many languages support calling library functions in C; for example, the Python-based framework NumPy uses C for the high-performance and hardware-interacting aspects.
+
+
+=== Other languages are written in C ===
+A consequence of C's wide availability and efficiency is that compilers, libraries and interpreters of other programming languages are often implemented in C. For example, the reference implementations of Python, Perl, Ruby, and PHP are written in C.
+
+
+== Limitations ==
+Ritchie himself joked about the limitations of the language that he created:
+
+the power of assembly language and the convenience of ... assembly language
+While C is popular, influential and hugely successful, it has drawbacks, including:
+
+The standard dynamic memory handling with malloc and free is prone to mistakes. Improper use can lead to memory leaks and dangling pointers.
+The use of pointers and the direct manipulation of memory means corruption of memory is possible.
+There is type checking, yet it does not apply to some areas like variadic functions, and the type checking can be trivially or inadvertently circumvented. It is weakly typed, despite being statically typed.
+Since the code generated by the compiler contains few run-time checks, there is a burden on the programmer to consider all possible outcomes, to protect against buffer overruns, array bounds checking, stack overflows, memory exhaustion, and consider race conditions, thread isolation, etc.
+The use of pointers and the run-time manipulation of these enables two ways to access the same data (aliasing), which is not always determinable at compile time. This means that some optimizations that may be available to some other languages, such as Fortran, are not possible in C. For this reason, Fortran is sometimes considered faster.
+Some of the standard library functions, e.g. scanf or strncat, can lead to buffer overruns.
+There is limited standardization in support for low-level variants in generated code, such as different function calling conventions and ABIs; different structure packing conventions; and different byte ordering within larger integers (including endianness). In many language implementations, some of these options may be handled with the preprocessor directive #pragma, and some with additional keywords e.g. use __cdecl calling convention. The directive and options are not consistently supported.
+String handling using the standard library is code-intensive, with explicit memory management required.
+The language does not directly support object orientation, introspection, run-time expression evaluation (like eval in JavaScript), garbage collection, etc.
+There are few guards against misuse of language features, which may enable unmaintainable code. In particular, the C preprocessor can hide troubling effects such as double evaluation and worse. This capability for obfuscated code has been celebrated with competitions such as the International Obfuscated C Code Contest and the Underhanded C Contest.
+C lacks standard support for exception handling and only offers return codes for error checking. The setjmp and longjmp standard library functions have been used to implement a try-catch mechanism via macros. Also, goto statements are commonly used for error handling.
+The issues with the language can lead to vulnerabilities, which may be exploited by malicious actors. 
+
+
+=== Mitigations for C's problems ===
+For some purposes, restricted styles of C have been adopted, e.g. MISRA C, CERT C, or Microsoft's Checked C in an attempt to reduce the opportunity for unwanted behaviour. Databases such as CWE attempt to count the ways that systems in general, especially those coded in C, have potential vulnerabilities, along with recommendations for mitigation.
+There are tools that can mitigate some of the drawbacks. Contemporary C compilers include checks which may generate warnings to help identify many potential bugs. 
+C's use of pointers can be made less risky by use of instruction set architecture extensions such as CHERI or Permission Overlay Extensions. These techniques change the fundamental nature of pointers at a hardware level to include bounds checks and purposes, which can help prevent buffer over-runs and inappropriate heap accesses.
+Since the early 2020s the Linux kernel has sections written in Rust, a language which has specific measures to improve safety.  DARPA have espoused the mass translation of code from C to RUST in their TRACTOR program.
+
+
+== Related languages ==
+
+Many languages developed after C were influenced by and borrowed aspects of C, including C++, C#, C shell, D, Go, Java, JavaScript, Julia, Limbo, LPC, Objective-C, Perl, PHP, Python, Ruby, Rust, Swift, Verilog and SystemVerilog. Some claim that the most pervasive influence has been syntactical – that these languages combine the statement and expression syntax of C with type systems, data models and large-scale program structures that differ from those of C, sometimes radically.
+Several C or near-C interpreters exist, including Ch and CINT, which can also be used for scripting.
+When object-oriented programming languages became popular, C++ and Objective-C were two different extensions of C that provided object-oriented capabilities. Both languages were originally implemented as source-to-source compilers; source code was translated into C, and then compiled with a C compiler.
+The C++ programming language (originally named "C with Classes") was devised by Bjarne Stroustrup as an approach to providing object-oriented functionality with a C-like syntax. C++ adds greater typing strength, scoping, and other tools useful in object-oriented programming, and permits generic programming via templates. The C++ language supports most of the smaller C language with a few exceptions.
+Objective-C was originally a thin layer on top of C, and remains a strict superset of C that permits object-oriented programming using a hybrid dynamic/static typing paradigm. Objective-C derives its syntax from both C and Smalltalk: syntax that involves preprocessing, expressions, function declarations, and function calls is inherited from C, while the syntax for object-oriented features was originally taken from Smalltalk.
+In addition to C++ and Objective-C, Ch, Cilk, and Unified Parallel C are nearly supersets of C.
+
+
+== See also ==
+Comparison of Pascal and C
+Comparison of programming languages
+List of C compilers
+List of C programming books
+Outline of the C programming language
+
+
+== Notes ==
+
+
+== References ==
+
+
+== Sources ==
+
+
+== Further reading ==
+
+
+== External links ==
+
+ISO C Working Group official website
+ISO/IEC 9899, publicly available official C documents, including the C99 Rationale
+"C99 with Technical corrigenda TC1, TC2, and TC3 included" (PDF). Archived from the original (PDF) on October 25, 2007. (3.61 MB)
+comp.lang.c Frequently Asked Questions
+A History of C, by Dennis Ritchie
+C Library Reference and Examples
+
+OpenCL
+OpenCL (Open Computing Language) is a framework for writing programs that execute across heterogeneous platforms consisting of central processing units (CPUs), graphics processing units (GPUs), digital signal processors (DSPs), field-programmable gate arrays (FPGAs) and other processors or hardware accelerators. OpenCL specifies a programming language (based on C99) for programming these devices and application programming interfaces (APIs) to control the platform and execute programs on the compute devices. OpenCL provides a standard interface for parallel computing using task- and data-based parallelism.
+OpenCL is an open standard maintained by the Khronos Group, a non-profit, open standards organization. Conformant implementations (passed the Conformance Test Suite) are available from a range of companies including AMD, Arm, Cadence, Google, Imagination, Intel, Nvidia, Qualcomm, Samsung, SPI and Verisilicon.
+
+
+== Overview ==
+OpenCL views a computing system as consisting of a number of compute devices, which might be central processing units (CPUs) or "accelerators" such as graphics processing units (GPUs), attached to a host processor (a CPU). It defines a C-like language for writing programs. Functions executed on an OpenCL device are called "kernels". A single compute device typically consists of several compute units, which in turn comprise multiple processing elements (PEs). A single kernel execution can run on all or many of the PEs in parallel. How a compute device is subdivided into compute units and PEs is up to the vendor; a compute unit can be thought of as a "core", but the notion of core is hard to define across all the types of devices supported by OpenCL (or even within the category of "CPUs"), and the number of compute units may not correspond to the number of cores claimed in vendors' marketing literature (which may actually be counting SIMD lanes).
+In addition to its C-like programming language, OpenCL defines an application programming interface (API) that allows programs running on the host to launch kernels on the compute devices and manage device memory, which is (at least conceptually) separate from host memory. Programs in the OpenCL language are intended to be compiled at run-time, so that OpenCL-using applications are portable between implementations for various host devices. The OpenCL standard defines host APIs for C and C++; third-party APIs exist for other programming languages and platforms such as Python, Java, Perl, D and .NET. An implementation of the OpenCL standard consists of a library that implements the API for C and C++, and an OpenCL C compiler for the compute devices targeted.
+In order to open the OpenCL programming model to other languages or to protect the kernel source from inspection, the Standard Portable Intermediate Representation (SPIR) can be used as a target-independent way to ship kernels between a front-end compiler and the OpenCL back-end.
+More recently Khronos Group has ratified SYCL, a higher-level programming model for OpenCL as a single-source eDSL based on pure C++17 to improve programming productivity. People interested by C++ kernels but not in the SYCL single-source programming style can use C++ features with compute kernel sources written in "C++ for OpenCL" language.
+
+
+=== Memory hierarchy ===
+OpenCL defines a four-level memory hierarchy for the compute device:
+
+global memory: shared by all processing elements, but has high access latency (__global);
+read-only memory: smaller, low latency, writable by the host CPU but not the compute devices (__constant);
+local memory: shared by a group of processing elements (__local);
+per-element private memory (registers; __private).
+Not every device needs to implement each level of this hierarchy in hardware. Consistency between the various levels in the hierarchy is relaxed, and only enforced by explicit synchronization constructs, notably barriers.
+Devices may or may not share memory with the host CPU. The host API provides handles on device memory buffers and functions to transfer data back and forth between host and devices.
+
+
+== OpenCL kernel language ==
+The programming language that is used to write compute kernels is called kernel language. OpenCL adopts C/C++-based languages to specify the kernel computations performed on the device with some restrictions and additions to facilitate efficient mapping to the heterogeneous hardware resources of accelerators. Traditionally OpenCL C was used to program the accelerators in OpenCL standard, later C++ for OpenCL kernel language was developed that inherited all functionality from OpenCL C but allowed to use C++ features in the kernel sources.
+
+
+=== OpenCL C language ===
+OpenCL C is a C99-based language dialect adapted to fit the device model in OpenCL. Memory buffers reside in specific levels of the memory hierarchy, and pointers are annotated with the region qualifiers __global, __local, __constant, and __private, reflecting this. Instead of a device program having a main function, OpenCL C functions are marked __kernel to signal that they are entry points into the program to be called from the host program. Function pointers, bit fields and variable-length arrays are omitted, and recursion is forbidden. The C standard library is replaced by a custom set of standard functions, geared toward math programming.
+OpenCL C is extended to facilitate use of parallelism with vector types and operations, synchronization, and functions to work with work-items and work-groups. In particular, besides scalar types such as float and double, which behave similarly to the corresponding types in C, OpenCL provides fixed-length vector types such as float4 (4-vector of single-precision floats); such vector types are available in lengths two, three, four, eight and sixteen for various base types. Vectorized operations on these types are intended to map onto SIMD instructions sets, e.g., SSE or VMX, when running OpenCL programs on CPUs. Other specialized types include 2-d and 3-d image types.
+
+
+==== Example: matrix–vector multiplication ====
+
+The following is a matrix–vector multiplication algorithm in OpenCL C.
+
+The kernel function matvec computes, in each invocation, the dot product of a single row of a matrix A and a vector x:
+yi=ai,:⋅x=∑jai,jxj.
+To extend this into a full matrix–vector multiplication, the OpenCL runtime maps the kernel over the rows of the matrix. On the host side, the clEnqueueNDRangeKernel function does this; it takes as arguments the kernel to execute, its arguments, and a number of work-items, corresponding to the number of rows in the matrix A.
+
+
+==== Example: computing the FFT ====
+This example will load a fast Fourier transform (FFT) implementation and execute it. The implementation is shown below. The code asks the OpenCL library for the first available graphics card, creates memory buffers for reading and writing (from the perspective of the graphics card), JIT-compiles the FFT-kernel and then finally asynchronously runs the kernel. The result from the transform is not read in this example. This is illustrative example code, not intended for serious use, so error-handling is entirely omitted.
+
+The actual calculation inside file "fft1D_1024_kernel_src.cl" (based on "Fitting FFT onto the G80 Architecture"):
+
+A full, open source implementation of an OpenCL FFT can be found on Apple's website.
+
+
+=== OpenCL C++ language ===
+
+OpenCL C++ is a short-lived specification for a language that combines OpenCL C and C++14. It was intended to be built in an online mode only, by passing the -cl-std=c++ parameter in clBuildProgram(). No extension for detecting support for this language is described. It is unknown whether any driver actually supported this language.
+
+
+=== C++ for OpenCL language ===
+
+In 2020, Khronos announced the transition to the community driven C++ for OpenCL programming language that provides features from C++17 in combination with the traditional OpenCL C features. This language allows to leverage a rich variety of language features from standard C++ while preserving backward compatibility to OpenCL C. This opens up a smooth transition path to C++ functionality for the OpenCL kernel code developers as they can continue using familiar programming flow and even tools as well as leverage existing extensions and libraries available for OpenCL C.
+The language semantics is described in the documentation published in the releases of OpenCL-Docs repository hosted by the Khronos Group but it is currently not ratified by the Khronos Group. The C++ for OpenCL language is not documented in a stand-alone document and it is based on the specification of C++ and OpenCL C. The open source Clang compiler has supported C++ for OpenCL since release 9.
+C++ for OpenCL has been originally developed as a Clang compiler extension and appeared in the release 9. As it was tightly coupled with OpenCL C and did not contain any Clang specific functionality its documentation has been re-hosted to the OpenCL-Docs repository from the Khronos Group along with the sources of other specifications and reference cards. The first official release of this document describing C++ for OpenCL version 1.0 has been published in December 2020. C++ for OpenCL 1.0 contains features from C++17 and it is backward compatible with OpenCL C 2.0. In December 2021, a new provisional C++ for OpenCL version 2021 has been released which is fully compatible with the OpenCL 3.0 standard. A work in progress draft of the latest C++ for OpenCL documentation can be found on the Khronos website.
+
+
+==== Features ====
+C++ for OpenCL supports most of the features (syntactically and semantically) from OpenCL C except for nested parallelism and blocks. However, there are minor differences in some supported features mainly related to differences in semantics between C++ and C. For example, C++ is more strict with the implicit type conversions and it does not support the restrict type qualifier. The following C++ features are not supported by C++ for OpenCL: virtual functions, dynamic_cast operator, non-placement new/delete operators, exceptions, pointer to member functions, references to functions, C++ standard libraries. C++ for OpenCL extends the concept of separate memory regions (address spaces) from OpenCL C to C++ features – functional casts, templates, class members, references, lambda functions, and operators. Most of C++ features are not available for the kernel functions e.g. overloading or templating, arbitrary class layout in parameter type.
+
+
+==== Example: complex-number arithmetic ====
+The following code snippet illustrates how kernels with complex-number arithmetic can be implemented in C++ for OpenCL language with convenient use of C++ features.
+
+
+==== Tooling and execution environment ====
+C++ for OpenCL language can be used for the same applications or libraries and in the same way as OpenCL C language is used. Due to the rich variety of C++ language features, applications written in C++ for OpenCL can express complex functionality more conveniently than applications written in OpenCL C and in particular generic programming paradigm from C++ is very attractive to the library developers.
+C++ for OpenCL sources can be compiled by OpenCL drivers that support cl_ext_cxx_for_opencl extension, which allows the use of -cl-std=CLC++ in clBuildProgram(). Arm has announced support for this extension in December 2020. However, due to increasing complexity of the algorithms accelerated on OpenCL devices, it is expected that more applications will compile C++ for OpenCL kernels offline using stand alone compilers such as Clang into executable binary format or portable binary format e.g. SPIR-V. Such an executable can be loaded during the OpenCL applications execution using a dedicated OpenCL API.
+Binaries compiled from sources in C++ for OpenCL 1.0 can be executed on OpenCL 2.0 conformant devices. Depending on the language features used in such kernel sources it can also be executed on devices supporting earlier OpenCL versions or OpenCL 3.0.
+Aside from OpenCL drivers, kernels written in C++ for OpenCL can be compiled for execution on Vulkan devices using clspv compiler and clvk runtime layer, just the same way as OpenCL C kernels.
+
+
+==== Contributions ====
+C++ for OpenCL is an open language developed by the community of contributors listed in its documentation. New contributions to the language semantic definition or open source tooling support are accepted from anyone interested as soon as they are aligned with the main design philosophy and they are reviewed and approved by the experienced contributors.
+
+
+== History ==
+OpenCL was initially developed by Apple Inc., which holds trademark rights, and refined into an initial proposal in collaboration with technical teams at AMD, IBM, Qualcomm, Intel, and Nvidia. Apple submitted this initial proposal to the Khronos Group. On June 16, 2008, the Khronos Compute Working Group was formed with representatives from CPU, GPU, embedded-processor, and software companies. This group worked for five months to finish the technical details of the specification for OpenCL 1.0 by November 18, 2008. This technical specification was reviewed by the Khronos members and approved for public release on December 8, 2008.
+
+
+=== OpenCL 1.0 ===
+OpenCL 1.0 released with Mac OS X Snow Leopard on August 28, 2009. According to an Apple press release:
+
+Snow Leopard further extends support for modern hardware with Open Computing Language (OpenCL), which lets any application tap into the vast gigaflops of GPU computing power previously available only to graphics applications. OpenCL is based on the C programming language and has been proposed as an open standard.
+
+AMD decided to support OpenCL instead of the now deprecated Close to Metal in its Stream framework. RapidMind announced their adoption of OpenCL underneath their development platform to support GPUs from multiple vendors with one interface. On December 9, 2008, Nvidia announced its intention to add full support for the OpenCL 1.0 specification to its GPU Computing Toolkit. On October 30, 2009, IBM released its first OpenCL implementation as a part of the XL compilers.
+Acceleration of calculations with factor to 1000 are possible with OpenCL in graphic cards against normal CPU.
+Some important features of next Version of OpenCL are optional in 1.0 like double- or half-precision operations.
+
+
+=== OpenCL 1.1 ===
+OpenCL 1.1 was ratified by the Khronos Group on June 14, 2010, and adds significant functionality for enhanced parallel programming flexibility, functionality, and performance including:
+
+New data types including 3-component vectors and additional image formats;
+Handling commands from multiple host threads and processing buffers across multiple devices;
+Operations on regions of a buffer including read, write and copy of 1D, 2D, or 3D rectangular regions;
+Enhanced use of events to drive and control command execution;
+Additional OpenCL built-in C functions such as integer clamp, shuffle, and asynchronous strided copies;
+Improved OpenGL interoperability through efficient sharing of images and buffers by linking OpenCL and OpenGL events.
+
+
+=== OpenCL 1.2 ===
+On November 15, 2011, the Khronos Group announced the OpenCL 1.2 specification, which added significant functionality over the previous versions in terms of performance and features for parallel programming. Most notable features include:
+
+Device partitioning: the ability to partition a device into sub-devices so that work assignments can be allocated to individual compute units. This is useful for reserving areas of the device to reduce latency for time-critical tasks.
+Separate compilation and linking of objects: the functionality to compile OpenCL into external libraries for inclusion into other programs.
+Enhanced image support (optional): 1.2 adds support for 1D images and 1D/2D image arrays. Furthermore, the OpenGL sharing extensions now allow for OpenGL 1D textures and 1D/2D texture arrays to be used to create OpenCL images.
+Built-in kernels: custom devices that contain specific unique functionality are now integrated more closely into the OpenCL framework. Kernels can be called to use specialised or non-programmable aspects of underlying hardware. Examples include video encoding/decoding and digital signal processors.
+DirectX functionality: DX9 media surface sharing allows for efficient sharing between OpenCL and DX9 or DXVA media surfaces. Equally, for DX11, seamless sharing between OpenCL and DX11 surfaces is enabled.
+The ability to force IEEE 754 compliance for single-precision floating-point math: OpenCL by default allows the single-precision versions of the division, reciprocal, and square root operation to be less accurate than the correctly rounded values that IEEE 754 requires. If the programmer passes the "-cl-fp32-correctly-rounded-divide-sqrt" command line argument to the compiler, these three operations will be computed to IEEE 754 requirements if the OpenCL implementation supports this, and will fail to compile if the OpenCL implementation does not support computing these operations to their correctly rounded values as defined by the IEEE 754 specification. This ability is supplemented by the ability to query the OpenCL implementation to determine if it can perform these operations to IEEE 754 accuracy.
+
+
+=== OpenCL 2.0 ===
+On November 18, 2013, the Khronos Group announced the ratification and public release of the finalized OpenCL 2.0 specification. Updates and additions to OpenCL 2.0 include:
+
+Shared virtual memory
+Nested parallelism
+Generic address space
+Images (optional, include 3D-Image)
+C11 atomics
+Pipes
+Android installable client driver extension
+half precision extended with optional cl_khr_fp16 extension
+cl_double: double precision IEEE 754 (optional)
+
+
+=== OpenCL 2.1 ===
+The ratification and release of the OpenCL 2.1 provisional specification was announced on March 3, 2015, at the Game Developer Conference in San Francisco. It was released on November 16, 2015. It introduced the OpenCL C++ kernel language, based on a subset of C++14, while maintaining support for the preexisting OpenCL C kernel language. Vulkan and OpenCL 2.1 share SPIR-V as an intermediate representation allowing high-level language front-ends to share a common compilation target. Updates to the OpenCL API include:
+
+Additional subgroup functionality
+Copying of kernel objects and states
+Low-latency device timer queries
+Ingestion of SPIR-V code by runtime
+Execution priority hints for queues
+Zero-sized dispatches from host
+AMD, ARM, Intel, HPC, and YetiWare have declared support for OpenCL 2.1.
+
+
+=== OpenCL 2.2 ===
+OpenCL 2.2 brings the OpenCL C++ kernel language into the core specification for significantly enhanced parallel programming productivity. It was released on May 16, 2017. Maintenance Update released in May 2018 with bugfixes.
+
+The OpenCL C++ kernel language is a static subset of the C++14 standard and includes classes, templates, lambda expressions, function overloads and many other constructs for generic and meta-programming.
+Uses the new Khronos SPIR-V 1.1 intermediate language which fully supports the OpenCL C++ kernel language.
+OpenCL library functions can now use the C++ language to provide increased safety and reduced undefined behavior while accessing features such as atomics, iterators, images, samplers, pipes, and device queue built-in types and address spaces.
+Pipe storage is a new device-side type in OpenCL 2.2 that is useful for FPGA implementations by making connectivity size and type known at compile time, enabling efficient device-scope communication between kernels.
+OpenCL 2.2 also includes features for enhanced optimization of generated code: applications can provide the value of specialization constant at SPIR-V compilation time, a new query can detect non-trivial constructors and destructors of program scope global objects, and user callbacks can be set at program release time.
+Runs on any OpenCL 2.0-capable hardware (only a driver update is required).
+
+
+=== OpenCL 3.0 ===
+The OpenCL 3.0 specification was released on September 30, 2020, after being in preview since April 2020. OpenCL 1.2 functionality has become a mandatory baseline, while all OpenCL 2.x and OpenCL 3.0 features were made optional. The specification retains the OpenCL C language and deprecates the OpenCL C++ Kernel Language, replacing it with the C++ for OpenCL language based on a Clang/LLVM compiler which implements a subset of C++17 and SPIR-V intermediate code.
+Version 3.0.7 of C++ for OpenCL with some Khronos openCL extensions were presented at IWOCL 21. Actual is 3.0.11 with some new extensions and corrections.
+NVIDIA, working closely with the Khronos OpenCL Working Group, improved Vulkan Interop with semaphores and memory sharing. Last minor update was 3.0.14 with bugfix and a new extension for multiple devices.
+
+
+== Roadmap ==
+
+When releasing OpenCL 2.2, the Khronos Group announced that OpenCL would converge where possible with Vulkan to enable OpenCL software deployment flexibility over both APIs. This has been now demonstrated by Adobe's Premiere Rush using the clspv open source compiler to compile significant amounts of OpenCL C kernel code to run on a Vulkan runtime for deployment on Android. OpenCL has a forward looking roadmap independent of Vulkan, with 'OpenCL Next' under development and targeting release in 2020. OpenCL Next may integrate extensions such as Vulkan / OpenCL Interop, Scratch-Pad Memory Management, Extended Subgroups, SPIR-V 1.4 ingestion and SPIR-V Extended debug info. OpenCL is also considering Vulkan-like loader and layers and a "flexible profile" for deployment flexibility on multiple accelerator types.
+
+
+== Open source implementations ==
+
+OpenCL consists of a set of headers and a shared object that is loaded at runtime. An installable client driver (ICD) must be installed on the platform for every class of vendor for which the runtime would need to support. That is, for example, in order to support Nvidia devices on a Linux platform, the Nvidia ICD would need to be installed such that the OpenCL runtime (the ICD loader) would be able to locate the ICD for the vendor and redirect the calls appropriately. The standard OpenCL header is used by the consumer application; calls to each function are then proxied by the OpenCL runtime to the appropriate driver using the ICD. Each vendor must implement each OpenCL call in their driver.
+The Apple, Nvidia, ROCm, RapidMind and Gallium3D implementations of OpenCL are all based on the LLVM Compiler technology and use the Clang compiler as their frontend.
+
+MESA Gallium Compute
+An implementation of OpenCL (actual 1.1 incomplete, mostly done AMD Radeon GCN) for a number of platforms is maintained as part of the Gallium Compute Project, which builds on the work of the Mesa project to support multiple platforms. Formerly this was known as CLOVER., actual development: mostly support for running incomplete framework with actual LLVM and CLANG, some new features like fp16 in 17.3, Target complete OpenCL 1.0, 1.1 and 1.2 for AMD and Nvidia. New Basic Development is done by Red Hat with SPIR-V also for Clover. New Target is modular OpenCL 3.0 with full support of OpenCL 1.2. Actual state is available in Mesamatrix. Image supports are here in the focus of development.
+RustiCL is a new implementation for Gallium compute with Rust instead of C. In Mesa 22.2 experimental implementation is available with openCL 3.0-support and image extension implementation for programs like Darktable. Intel Xe (Arc) and AMD GCN+ are supported in Mesa 22.3+. AMD R600 and Nvidia Kepler+ are also target of hardware support. RustiCL outperform AMD ROCM with Radeon RX 6700 XT hardware at Luxmark Benchmark. Mesa 23.1 supports official RustiCL. In Mesa 23.2 support of important fp64 is at experimental level.
+Microsoft's Windows 11 on Arm added support for OpenCL 1.2 via CLon12, an open source OpenCL implementation on top DirectX 12 via Mesa Gallium.
+BEIGNET
+An implementation by Intel for its Ivy Bridge + hardware was released in 2013. This software from Intel's China Team, has attracted criticism from developers at AMD and Red Hat, as well as Michael Larabel of Phoronix. Actual Version 1.3.2 support OpenCL 1.2 complete (Ivy Bridge and higher) and OpenCL 2.0 optional for Skylake and newer. support for Android has been added to Beignet., actual development targets: only support for 1.2 and 2.0, road to OpenCL 2.1, 2.2, 3.0 is gone to NEO.
+NEO
+An implementation by Intel for Gen. 8 Broadwell + Gen. 9 hardware released in 2018. This driver replaces Beignet implementation for supported platforms (not older 6.gen to Haswell). NEO provides OpenCL 2.1 support on Core platforms and OpenCL 1.2 on Atom platforms. Actual in 2020 also Graphic Gen 11 Ice Lake and Gen 12 Tiger Lake are supported. New OpenCL 3.0 is available for Alder Lake, Tiger Lake to Broadwell with Version 20.41+. It includes now optional OpenCL 2.0, 2.1 Features complete and some of 2.2.
+Kallaballa Compute Runtime
+A former unofficial fork of the NEO (Intel Compute Runtime) that enabled the use of OpenGL objects on Linux with Intel's integrated GPUs (iGPUs) using the cl_khr_gl_sharing OpenCL extension. The project aimed to remain as compatible as possible with the official driver. The initial prototype was written by Jacek Danecki (Intel) but was later dropped by Intel. Amir Hassan picked up the prototype in September 2022 and largely completed it, with the first release on October 29, 2022. Intel became aware of the fork, and with minor adjustments, it was merged back into the official project on March 20, 2023. On May 17, 2023, the extension implemented by the fork was officially released as part of the Intel NEO Compute Runtime, making the unofficial fork no longer necessary. Following this, several additional improvements were made by the open-source community.
+ROCm
+Created as part of AMD's GPUOpen, ROCm (Radeon Open Compute) is an open source Linux project built on OpenCL 1.2 with language support for 2.0. The system is compatible with all modern AMD CPUs and APUs (actual partly GFX 7, GFX 8 and 9), as well as Intel Gen7.5+ CPUs (only with PCI 3.0). With version 1.9 support is in some points extended experimental to Hardware with PCIe 2.0 and without atomics. An overview of actual work is done on XDC2018. ROCm Version 2.0 supports Full OpenCL 2.0, but some errors and limitations are on the todo list. Version 3.3 is improving in details. Version 3.5 does support OpenCL 2.2. Version 3.10 was with improvements and new APIs. Announced at SC20 is ROCm 4.0 with support of AMD Compute Card Instinct MI 100. Actual documentation of 5.5.1 and before is available at GitHub. OpenCL 3.0 is available. RocM 5.5.x+ supports only GFX 9 Vega and later, so alternative are older RocM Releases or in future RustiCL for older Hardware.
+POCL
+A portable implementation supporting CPUs and some GPUs (via CUDA and HSA). Building on Clang and LLVM. With version 1.0 OpenCL 1.2 was nearly fully implemented along with some 2.x features. Version 1.2 is with LLVM/CLANG 6.0, 7.0 and Full OpenCL 1.2 support with all closed tickets in Milestone 1.2. OpenCL 2.0 is nearly full implemented. Version 1.3 Supports Mac OS X. Version 1.4 includes support for LLVM 8.0 and 9.0. Version 1.5 implements LLVM/Clang 10 support. Version 1.6 implements LLVM/Clang 11 support and CUDA Acceleration. Actual targets are complete OpenCL 2.x, OpenCL 3.0 and improvement of performance. POCL 1.6 is with manual optimization at the same level of Intel compute runtime. Version 1.7 implements LLVM/Clang 12 support and some new OpenCL 3.0 features. Version 1.8 implements LLVM/Clang 13 support. Version 3.0 implements OpenCL 3.0 at minimum level and LLVM/Clang 14. Version 3.1 works with LLVM/Clang 15 and improved Spir-V support.
+Shamrock
+A Port of Mesa Clover for ARM with full support of OpenCL 1.2, no actual development for 2.0.
+FreeOCL
+A CPU focused implementation of OpenCL 1.2 that implements an external compiler to create a more reliable platform, no actual development.
+MOCL
+An OpenCL implementation based on POCL by the NUDT researchers for Matrix-2000 was released in 2018. The Matrix-2000 architecture is designed to replace the Intel Xeon Phi accelerators of the TianHe-2 supercomputer. This programming framework is built on top of LLVM v5.0 and reuses some code pieces from POCL as well. To unlock the hardware potential, the device runtime uses a push-based task dispatching strategy and the performance of the kernel atomics is improved significantly. This framework has been deployed on the TH-2A system and is readily available to the public. Some of the software will next ported to improve POCL.
+VC4CL
+An OpenCL 1.2 implementation for the VideoCore IV (BCM2763) processor used in the Raspberry Pi before its model 4.
+
+
+== Vendor implementations ==
+
+
+=== Timeline of vendor implementations ===
+June, 2008: During Apple's WWDC conference an early beta of Mac OS X Snow Leopard was made available to the participants, it included the first beta implementation of OpenCL, about 6 months before the final version 1.0 specification was ratified late 2008. They also showed two demos. One was a grid of 8×8 screens rendered, each displaying the screen of an emulated Apple II machine – 64 independent instances in total, each running a famous karate game. This showed task parallelism, on the CPU. The other demo was a N-body simulation running on the GPU of a Mac Pro, a data parallel task.
+December 10, 2008: AMD and Nvidia held the first public OpenCL demonstration, a 75-minute presentation at SIGGRAPH Asia 2008. AMD showed a CPU-accelerated OpenCL demo explaining the scalability of OpenCL on one or more cores while Nvidia showed a GPU-accelerated demo.
+March 16, 2009: at the 4th Multicore Expo, Imagination Technologies announced the PowerVR SGX543MP, the first GPU of this company to feature OpenCL support.
+March 26, 2009: at GDC 2009, AMD and Havok demonstrated the first working implementation for OpenCL accelerating Havok Cloth on ATI Radeon HD 4000 series GPU.
+April 20, 2009: Nvidia announced the release of its OpenCL driver and SDK to developers participating in its OpenCL Early Access Program.
+August 5, 2009: AMD unveiled the first development tools for its OpenCL platform as part of its ATI Stream SDK v2.0 Beta Program.
+August 28, 2009: Apple released Mac OS X Snow Leopard, which contains a full implementation of OpenCL.
+September 28, 2009: Nvidia released its own OpenCL drivers and SDK implementation.
+October 13, 2009: AMD released the fourth beta of the ATI Stream SDK 2.0, which provides a complete OpenCL implementation on both R700/HD 5000 GPUs and SSE3 capable CPUs. The SDK is available for both Linux and Windows.
+November 26, 2009: Nvidia released drivers for OpenCL 1.0 (rev 48).
+October 27, 2009: S3 released their first product supporting native OpenCL 1.0 – the Chrome 5400E embedded graphics processor.
+December 10, 2009: VIA released their first product supporting OpenCL 1.0 – ChromotionHD 2.0 video processor included in VN1000 chipset.
+December 21, 2009: AMD released the production version of the ATI Stream SDK 2.0, which provides OpenCL 1.0 support for HD 5000 GPUs and beta support for R700 GPUs.
+June 1, 2010: ZiiLABS released details of their first OpenCL implementation for the ZMS processor for handheld, embedded and digital home products.
+June 30, 2010: IBM released a fully conformant version of OpenCL 1.0.
+September 13, 2010: Intel released details of their first OpenCL implementation for the Sandy Bridge chip architecture. Sandy Bridge will integrate Intel's newest graphics chip technology directly onto the central processing unit.
+November 15, 2010: Wolfram Research released Mathematica 8 with OpenCLLink package.
+March 3, 2011: Khronos Group announces the formation of the WebCL working group to explore defining a JavaScript binding to OpenCL. This creates the potential to harness GPU and multi-core CPU parallel processing from a Web browser.
+March 31, 2011: IBM released a fully conformant version of OpenCL 1.1.
+April 25, 2011: IBM released OpenCL Common Runtime v0.1 for Linux on x86 Architecture.
+May 4, 2011: Nokia Research releases an open source WebCL extension for the Firefox web browser, providing a JavaScript binding to OpenCL.
+July 1, 2011: Samsung Electronics releases an open source prototype implementation of WebCL for WebKit, providing a JavaScript binding to OpenCL.
+August 8, 2011: AMD released the OpenCL-driven AMD Accelerated Parallel Processing (APP) Software Development Kit (SDK) v2.5, replacing the ATI Stream SDK as technology and concept.
+December 12, 2011: AMD released AMD APP SDK v2.6 which contains a preview of OpenCL 1.2.
+February 27, 2012: The Portland Group released the PGI OpenCL compiler for multi-core ARM CPUs.
+April 17, 2012: Khronos released a WebCL working draft.
+May 6, 2013: Altera released the Altera SDK for OpenCL, version 13.0. It is conformant to OpenCL 1.0.
+November 18, 2013: Khronos announced that the specification for OpenCL 2.0 had been finalized.
+March 19, 2014: Khronos releases the WebCL 1.0 specification.
+August 29, 2014: Intel releases HD Graphics 5300 driver that supports OpenCL 2.0.
+September 25, 2014: AMD releases Catalyst 14.41 RC1, which includes an OpenCL 2.0 driver.
+January 14, 2015: Xilinx Inc. announces SDAccel development environment for OpenCL, C, and C++, achieves Khronos Conformance.
+April 13, 2015: Nvidia releases WHQL driver v350.12, which includes OpenCL 1.2 support for GPUs based on Kepler or later architectures. Driver 340+ support OpenCL 1.1 for Tesla and Fermi.
+August 26, 2015: AMD released AMD APP SDK v3.0 which contains full support of OpenCL 2.0 and sample coding.
+November 16, 2015: Khronos announced that the specification for OpenCL 2.1 had been finalized.
+April 18, 2016: Khronos announced that the specification for OpenCL 2.2 had been provisionally finalized.
+November 3, 2016: Intel support for Gen7+ of OpenCL 2.1 in SDK 2016 r3.
+February 17, 2017: Nvidia begins evaluation support of OpenCL 2.0 with driver 378.66.
+May 16, 2017: Khronos announced that the specification for OpenCL 2.2 had been finalized with SPIR-V 1.2.
+May 14, 2018: Khronos announced Maintenance Update for OpenCL 2.2 with Bugfix and unified headers.
+April 27, 2020: Khronos announced provisional Version of OpenCL 3.0.
+June 1, 2020: Intel NEO runtime with OpenCL 3.0 for new Tiger Lake.
+June 3, 2020: AMD announced RocM 3.5 with OpenCL 2.2 support.
+September 30, 2020: Khronos announced that the specifications for OpenCL 3.0 had been finalized (CTS also available).
+October 16, 2020: Intel announced with NEO 20.41 support for OpenCL 3.0 (includes mostly of optional OpenCL 2.x).
+April 6, 2021: Nvidia supports OpenCL 3.0 for Ampere. Maxwell and later GPUs also supports OpenCL 3.0 with Nvidia driver 465+.
+August 20, 2022: Intel Arc Alchemist GPUs (Arc A380, A350M, A370M, A550M, A730M and A770M) are conformant with OpenCL 3.0.
+October 14, 2022: Arm Mali-G615 and Mali-G715-Immortalis are conformant with OpenCL 3.0.
+November 11, 2022: The Rusticl OpenCL Library is conformant with OpenCL 3.0.
+
+
+== Devices ==
+As of 2016, OpenCL runs on graphics processing units (GPUs), CPUs with SIMD instructions, FPGAs, Movidius Myriad 2, Adapteva Epiphany and DSPs.
+
+
+=== Khronos Conformance Test Suite ===
+To be officially conformant, an implementation must pass the Khronos Conformance Test Suite (CTS), with results being submitted to the Khronos Adopters Program. The Khronos CTS code for all OpenCL versions has been available in open source since 2017.
+
+
+=== Conformant products ===
+The Khronos Group maintains an extended list of OpenCL-conformant products.
+
+All standard-conformant implementations can be queried using one of the clinfo tools (there are multiple tools with the same name and similar feature set).
+
+
+=== Version support ===
+Products and their version of OpenCL support include:
+
+
+==== OpenCL 3.0 support ====
+All hardware with OpenCL 1.2+ is possible, OpenCL 2.x only optional, Khronos Test Suite available since 2020-10
+
+(2020) Intel NEO Compute: 20.41+ for Gen 12 Tiger Lake to Broadwell (include full 2.0 and 2.1 support and parts of 2.2)
+(2020) Intel 6th, 7th, 8th, 9th, 10th, 11th gen processors (Skylake, Kaby Lake, Coffee Lake, Comet Lake, Ice Lake, Tiger Lake) with latest Intel Windows graphics driver
+(2021) Intel 11th, 12th gen processors (Rocket Lake, Alder Lake) with latest Intel Windows graphics driver
+(2021) Arm Mali-G78, Mali-G310, Mali-G510, Mali-G610, Mali-G710 and Mali-G78AE.
+(2022) Intel 13th gen processors (Raptor Lake) with latest Intel Windows graphics driver
+(2022) Intel Arc discrete graphics with latest Intel Arc Windows graphics driver
+(2021) Nvidia Maxwell, Pascal, Volta, Turing and Ampere with Nvidia graphics driver 465+.
+(2022) Nvidia Ada Lovelace with Nvidia graphics driver 525+.
+(2022) Samsung Xclipse 920 GPU (based on AMD RDNA2)
+(2023) Intel 14th gen processors (Raptor Lake) Refresh with latest Intel Windows graphics driver
+(2023) Intel Core Ultra Series 1 processors (Meteor Lake) with latest Intel Windows graphics driver
+
+
+==== OpenCL 2.2 support ====
+None yet: Khronos Test Suite ready, with Driver Update all Hardware with 2.0 and 2.1 support possible
+
+Intel NEO Compute: Work in Progress for actual products
+ROCm: Version 3.5+ mostly
+
+
+==== OpenCL 2.1 support ====
+(2018+) Support backported to Intel 5th and 6th gen processors (Broadwell, Skylake)
+(2017+) Intel 7th, 8th, 9th, 10th gen processors (Kaby Lake, Coffee Lake, Comet Lake, Ice Lake)
+(2017+) Intel Xeon Phi processors (Knights Landing) (experimental runtime)
+Khronos: with Driver Update all Hardware with 2.0 support possible
+
+
+==== OpenCL 2.0 support ====
+(2011+) AMD GCN GPU's (HD 7700+/HD 8000/Rx 200/Rx 300/Rx 400/Rx 500/Rx 5000-Series), some GCN 1st Gen only 1.2 with some Extensions
+(2013+) AMD GCN APU's (Jaguar, Steamroller, Puma, Excavator & Zen-based)
+(2014+) Intel 5th & 6th gen processors (Broadwell, Skylake)
+(2015+) Qualcomm Adreno 5xx series
+(2018+) Qualcomm Adreno 6xx series
+(2017+) ARM Mali (Bifrost) G51 and G71 in Android 7.1 and Linux
+(2018+) ARM Mali (Bifrost) G31, G52, G72 and G76
+(2017+) incomplete Evaluation support: Nvidia Kepler, Maxwell, Pascal, Volta and Turing GPU's (GeForce 600, 700, 800, 900 & 10-series, Quadro K-, M- & P-series, Tesla K-, M- & P-series) with Driver Version 378.66+
+
+
+==== OpenCL 1.2 support ====
+(2011+) for some AMD GCN 1st Gen some OpenCL 2.0 Features not possible today, but many more Extensions than Terascale
+(2009+) AMD TeraScale 2 & 3 GPU's (RV8xx, RV9xx in HD 5000, 6000 & 7000 Series)
+(2011+) AMD TeraScale APU's (K10, Bobcat & Piledriver-based)
+(2012+) Nvidia Kepler, Maxwell, Pascal, Volta and Turing GPU's (GeForce 600, 700, 800, 900, 10, 16, 20 series, Quadro K-, M- & P-series, Tesla K-, M- & P-series)
+(2012+) Intel 3rd & 4th gen processors (Ivy Bridge, Haswell)
+(2013+) Intel Xeon Phi coprocessors (Knights Corner)
+(2013+) Qualcomm Adreno 4xx series
+(2013+) ARM Mali Midgard 3rd gen (T760)
+(2015+) ARM Mali Midgard 4th gen (T8xx)
+
+
+==== OpenCL 1.1 support ====
+(2008+) some AMD TeraScale 1 GPU's (RV7xx in HD4000-series)
+(2008+) Nvidia Tesla, Fermi GPU's (GeForce 8, 9, 100, 200, 300, 400, 500-series, Quadro-series or Tesla-series with Tesla or Fermi GPU)
+(2011+) Qualcomm Adreno 3xx series
+(2012+) ARM Mali Midgard 1st and 2nd gen (T-6xx, T720)
+
+
+==== OpenCL 1.0 support ====
+mostly updated to 1.1 and 1.2 after first Driver for 1.0 only
+
+
+== Portability, performance and alternatives ==
+A key feature of OpenCL is portability, via its abstracted memory and execution model, and the programmer is not able to directly use hardware-specific technologies such as inline Parallel Thread Execution (PTX) for Nvidia GPUs unless they are willing to give up direct portability on other platforms. It is possible to run any OpenCL kernel on any conformant implementation.
+However, performance of the kernel is not necessarily portable across platforms. Existing implementations have been shown to be competitive when kernel code is properly tuned, though, and auto-tuning has been suggested as a solution to the performance portability problem, yielding "acceptable levels of performance" in experimental linear algebra kernels. Portability of an entire application containing multiple kernels with differing behaviors was also studied, and shows that portability only required limited tradeoffs.
+A study at Delft University from 2011 that compared CUDA programs and their straightforward translation into OpenCL C found CUDA to outperform OpenCL by at most 30% on the Nvidia implementation. The researchers noted that their comparison could be made fairer by applying manual optimizations to the OpenCL programs, in which case there was "no reason for OpenCL to obtain worse performance than CUDA". The performance differences could mostly be attributed to differences in the programming model (especially the memory model) and to NVIDIA's compiler optimizations for CUDA compared to those for OpenCL.
+Another study at D-Wave Systems Inc. found that "The OpenCL kernel’s performance is between about 13% and 63% slower, and the end-to-end time is between about 16% and 67% slower" than CUDA's performance.
+The fact that OpenCL allows workloads to be shared by CPU and GPU, executing the same programs, means that programmers can exploit both by dividing work among the devices. This leads to the problem of deciding how to partition the work, because the relative speeds of operations differ among the devices. Machine learning has been suggested to solve this problem: Grewe and O'Boyle describe a system of support-vector machines trained on compile-time features of program that can decide the device partitioning problem statically, without actually running the programs to measure their performance.
+In a comparison of actual graphic cards of AMD RDNA 2 and Nvidia RTX Series there is an undecided result by OpenCL-Tests. Possible performance increases from the use of Nvidia CUDA or OptiX were not tested.
+
+
+== See also ==
+
+
+== References ==
+
+
+== External links ==
+
+Official website
+Official website for WebCL
+International Workshop on OpenCL Archived January 26, 2021, at the Wayback Machine (IWOCL) sponsored by The Khronos Group

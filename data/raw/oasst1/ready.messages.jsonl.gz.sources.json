@@ -1,0 +1,13 @@
+{
+  "repo_id": "OpenAssistant/oasst1",
+  "requested_revision": "5c38bf1",
+  "resolved_commit": "5c38bf14fe3c7bb31bb8e13eb4f87b2c6fd78d93",
+  "file_path": "2023-04-12_oasst_ready.messages.jsonl.gz",
+  "local_path": "data\\raw\\oasst1\\ready.messages.jsonl.gz",
+  "dataset_card_license": "apache-2.0",
+  "dataset_card_url": "https://huggingface.co/datasets/OpenAssistant/oasst1",
+  "file_url": "https://huggingface.co/datasets/OpenAssistant/oasst1/resolve/5c38bf14fe3c7bb31bb8e13eb4f87b2c6fd78d93/2023-04-12_oasst_ready.messages.jsonl.gz",
+  "retrieval_utc": "2026-11-16T19:34:13.7466011Z",
+  "sha256": "286A6E9A5A413B3272AE9C0B5A20D327983DEA1C24342AE28CB244A6DA65185C",
+  "note": "Dataset-card license verified; independently review licenses of all underlying media before training or redistribution."
+}

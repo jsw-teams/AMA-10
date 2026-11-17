@@ -1,0 +1,32 @@
+Language model
+A language model is a computational model that predicts sequences in natural language. Language models are useful for a variety of tasks, including speech recognition, machine translation, natural language generation (generating more human-like text), optical character recognition, route optimization, handwriting recognition, grammar induction, information retrieval and disaster response.
+Large language models (LLMs) are currently based on large transformers trained on large datasets (using texts scraped from the public internet, as well as any and all other text that can be obtained legally or illegally). They have superseded recurrent neural network-based models, which had previously superseded the purely statistical models, such as the word n-gram language model.
+
+
+
+Aprendizaje automático
+El aprendizaje automático (AA; del inglés machine learning, ML), también denominado aprendizaje de máquinas, es una rama de la inteligencia artificial y un campo de las ciencias de la computación dedicado al estudio de algoritmos y modelos que mejoran su desempeño en determinadas tareas a partir de datos y experiencia. En lugar de establecer manualmente todas las reglas necesarias para resolver un problema, estos métodos permiten estimar patrones, relaciones o estrategias mediante un proceso de aprendizaje.​​
+En una formulación clásica, un programa aprende a partir de la experiencia E respecto de una tarea T y una medida de rendimiento P si su rendimiento en T, medido mediante P, mejora con E.​ Entre sus aplicaciones se encuentran la clasificación, la regresión, la agrupación de datos, la detección de anomalías, el reconocimiento del habla, la visión artificial, los sistemas de recomendación y el procesamiento de lenguaje natural.
+En muchas ocasiones el campo de actuación del aprendizaje automático se solapa con el de la estadística inferencial, ya que las dos disciplinas se basan en el análisis de datos. Sin embargo, el aprendizaje automático incorpora las preocupaciones de la complejidad computacional de los problemas. El aprendizaje automático también está estrechamente relacionado con el reconocimiento de patrones.​ El aprendizaje automático no se limita a los métodos estadísticos: también comprende técnicas de optimización, representación del conocimiento y toma de decisiones secuenciales.
+
+Apprentissage automatique
+L'apprentissage automatique (en anglais : machine learning (ML), litt. « apprentissage machine »), apprentissage artificiel ou apprentissage statistique est un champ d'étude de l'intelligence artificielle qui se fonde sur des approches mathématiques et statistiques pour donner aux ordinateurs la capacité d'« apprendre » à partir de données, c'est-à-dire d'améliorer leurs performances à résoudre des tâches sans être explicitement programmés pour chacune. Plus largement, il concerne la conception, l'analyse, l'optimisation, le développement et l'implémentation de telles méthodes. On parle d'apprentissage statistique car l'apprentissage consiste à créer un modèle dont l'erreur statistique moyenne est la plus faible possible.
+L'apprentissage automatique comporte généralement deux phases. La première, dite phase d'apprentissage ou d'entraînement, consiste à estimer un modèle à partir d'un jeu de données d'entraînement. Cette étape est souvent formulée comme un problème d'optimisation.
+La seconde phase consiste à utiliser le modèle entraîné afin d'effectuer des prédictions sur de nouvelles données.
+Les méthodes d'apprentissage incrémental peuvent continuer à apprendre une fois en production.
+Plusieurs critères permettent de classifier les méthodes existantes.
+Le paradigme d'apprentissage (supervisé, non-supervisé, par renforcement…) est déterminé par la nature des données, et notamment la disponibilité ou non de données étiquetées, c'est-à-dire pour lesquelles la réponse au problème est connue.
+Par ailleurs, chaque méthode cherche à résoudre un problème d'apprentissage précis : on distingue les problèmes de régression, de classification, de partitionnement, et de réduction de dimensionnalité.
+Enfin, pour une tâche identifiée, une méthode d'apprentissage est caractérisée par le choix d'un modèle ainsi que d'algorithmes permettant d'entraîner ce modèle.
+L'apprentissage automatique peut être appliqué à divers types de données, tels des graphes, des arbres, des courbes, ou plus simplement des vecteurs de caractéristiques, qui peuvent être des variables qualitatives ou quantitatives continues ou discrètes.
+Si le modèle apprend de manière incrémentale, en fonction d'une récompense reçue par le programme pour chacune des actions entreprises, on parle d'apprentissage par renforcement.
+
+機械学習
+機械学習（きかいがくしゅう、英: machine learning）とは、経験からの学習により自動で改善するコンピュータアルゴリズムもしくはその研究領域で、人工知能の一種であるとみなされている。
+典型的には「訓練データ」もしくは「学習データ」と呼ばれるデータを使って学習し、学習結果を使って何らかのタスクをこなすものとされる。例えば過去のスパムメールを訓練データとして用いて学習し、スパムフィルタリングというタスクをこなす、といったものである。
+
+机器学习
+机器学习（英語：machine learning，简称ML）是人工智能的一个分支。机器学习理论主要是设计和分析一些让计算机可以自动“学习”的算法。机器学习算法是一类从数据中自动分析获得规律，并利用规律对未知数据进行预测的算法。因为学习算法中涉及了大量的统计学理论，机器学习与推断统计学联系尤为密切，也被称为统计学习理论。算法设计方面，机器学习理论关注可以实现的，行之有效的学习算法（要防止錯誤累積）。很多推论问题属于非程序化決策，所以部分的机器学习研究是开发容易处理的近似算法。
+机器学习已广泛应用于数据挖掘、计算机视觉、自然语言处理、生物特征识别、搜索引擎、医学诊断、检测信用卡詐騙、证券市场分析、DNA序列测序、语音和手写识别、游戏和机器人等领域。机器学习在近30多年已发展为一门多领域科际整合，涉及概率论、统计学、逼近论、凸分析、计算复杂性理论、資訊理論等多门学科。
+
+

@@ -1,0 +1,25 @@
+Natural language processing
+Natural language processing (NLP) is the processing of natural language information by a computer. NLP is a subfield of computer science and is closely associated with artificial intelligence. NLP is also related to information retrieval, knowledge representation, computational linguistics, and linguistics more broadly.
+Major processing tasks in an NLP system include: speech recognition, text classification, natural language understanding, and natural language generation.
+
+
+
+Procesamiento de lenguajes naturales
+El procesamiento de(l) lenguaje natural o de lengua(je)s naturales,​​ abreviado PLN​​ (o NLP por sus siglas en inglés), es un campo de las ciencias de la computación, de la inteligencia artificial y de la lingüística que estudia las interacciones entre las computadoras y el lenguaje humano, así como los detalles computacionales de las lenguas naturales. Se ocupa de la formulación e investigación de mecanismos eficaces computacionalmente para la comunicación entre personas y máquinas por medio del lenguaje natural, es decir, de las lenguas del mundo. No trata de la comunicación por medio de lenguas naturales de una forma abstracta, sino de diseñar mecanismos para comunicarse que sean eficaces computacionalmente —que se puedan realizar por medio de programas que ejecuten o simulen la comunicación—. Los modelos aplicados se enfocan no solo a la comprensión del lenguaje de por sí, sino a aspectos generales cognitivos humanos y a la organización de la memoria. El lenguaje natural sirve solo de medio para estudiar estos fenómenos. Hasta la década de 1980, la mayoría de los sistemas de PLN se basaban en un complejo conjunto de reglas diseñadas a mano. A partir de finales de 1980, sin embargo, hubo una revolución en PLN con la introducción de algoritmos de aprendizaje automático para el procesamiento del lenguaje.​​ El PLN es el que se encarga de que los equipos de cómputo puedan comunicarse con los humanos utilizando la inteligencia artificial y los modelos de aprendizaje ML.
+
+Traitement automatique des langues
+Le traitement automatique des langues (TAL ou TALN), en anglais natural language processing ou NLP, est un domaine multidisciplinaire impliquant la linguistique, l'informatique et l'intelligence artificielle, qui vise à créer des outils de traitement des langues naturelles pour diverses applications. Il ne doit pas être confondu avec la linguistique informatique, qui vise à analyser les langues au moyen d'outils informatiques.
+Le TALN est sorti des laboratoires de recherche pour être progressivement mis en œuvre dans des applications informatiques nécessitant l'intégration du langage humain à la machine. Aussi le TALN est-il parfois appelé ingénierie linguistique.
+
+自然言語処理
+自然言語処理（しぜんげんごしょり、英語: Natural language processing、略称：NLP）は、人間が日常的に使っている自然言語をコンピュータに処理させる一連の技術であり、人工知能と言語学の一分野である。「計算言語学」（computational linguistics）との類似もあるが、自然言語処理は工学的な視点からの言語処理をさすのに対して、計算言語学は言語学的視点を重視する手法をさす事が多い。データベース内の情報を自然言語に変換したり、自然言語の文章をより形式的な（コンピュータが理解しやすい）表現に変換するといった処理が含まれる。応用例としては機械翻訳や仮名漢字変換が挙げられる。
+自然言語の理解をコンピュータにさせることは、自然言語理解とされている。自然言語理解と、自然言語処理の差は、意味を扱うか、扱わないかという説もあったが、最近は数理的な言語解析手法（統計や確率など）が広められた為、パーサ（統語解析器）などの精度や速度が一段と上がり、その意味合いは違ってきている。もともと自然言語の意味論的側面を全く無視して達成できることは非常に限られている。このため、自然言語処理は形態素解析と構文解析、文脈解析、意味解析などをSyntaxなど表層的な観点から解析をする学問であるが、自然言語理解は、意味をどのように理解するかという個々人の理解と推論部分が主な研究の課題になってきており、両者の境界は意思や意図が含まれるかどうかになってきている。
+
+
+
+自然语言处理
+自然語言處理（英語：Natural Language Processing，缩写作 NLP）是人工智慧和語言學領域的交叉學科，研究计算机处理、理解与生成人类语言的技術。此領域探討如何處理及運用自然語言；自然語言處理包括多方面和步骤，基本有认知、理解、生成等部分。
+自然語言認知和理解是讓電腦把输入的語言变成结构化符号与语义关系，然后根据目的再處理。自然語言生成系統则是把計算機數據轉化為自然語言。
+自然语言处理要研制表示语言能力和语言应用的模型, 建立计算框架来实现并完善语言模型，并根据语言模型设计各种实用系统及探讨这些系统的评测技术。
+
+
