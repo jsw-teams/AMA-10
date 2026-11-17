@@ -20,7 +20,15 @@ __kernel void ama10_recurrent_cell(
     float gate=1.0f/(1.0f+exp(-gate_logit));
     float h=(1.0f-gate)*fast[i]+gate*proposal;
     next_fast[i]=h;
-    next_slow[i]=0.995f*slow[i]+0.005f*h;
+    next_slow[i]=slow[i];
+}
+
+__kernel void ama10_slow_update(
+    __global const float *fast,__global const float *slow,__global float *next_slow,
+    const uint width)
+{
+    const uint i=(uint)get_global_id(0);if(i>=width)return;
+    next_slow[i]=0.995f*slow[i]+0.005f*fast[i];
 }
 
 __kernel void ama10_recurrent_confidence(
@@ -99,7 +107,7 @@ __kernel void ama10_training_forward_cell(
     const uint token=tokens[time];float previous_fast,previous_slow;
     if(layer){
         previous_fast=cache[ama10_training_cache_index(time,layer-1,6,i,depth,width)];
-        previous_slow=cache[ama10_training_cache_index(time,layer-1,7,i,depth,width)];
+        previous_slow=cache[ama10_training_cache_index(time,layer-1,1,i,depth,width)];
     }else if(time){
         previous_fast=cache[ama10_training_cache_index(time-1,depth-1,6,i,depth,width)];
         previous_slow=cache[ama10_training_cache_index(time-1,depth-1,7,i,depth,width)];
@@ -112,7 +120,7 @@ __kernel void ama10_training_forward_cell(
     for(uint j=0;j<width;j++){
         float hprev,mprev;
         if(layer){hprev=cache[ama10_training_cache_index(time,layer-1,6,j,depth,width)];
-                  mprev=cache[ama10_training_cache_index(time,layer-1,7,j,depth,width)];}
+                  mprev=cache[ama10_training_cache_index(time,layer-1,1,j,depth,width)];}
         else if(time){hprev=cache[ama10_training_cache_index(time-1,depth-1,6,j,depth,width)];
                       mprev=cache[ama10_training_cache_index(time-1,depth-1,7,j,depth,width)];}
         else{hprev=initial_fast[j];mprev=initial_slow[j];}
@@ -121,7 +129,7 @@ __kernel void ama10_training_forward_cell(
     }
     const float proposal=tanh(z),gate=1.0f/(1.0f+exp(-q));
     const float h=(1.0f-gate)*previous_fast+gate*proposal;
-    const float slow=rho*previous_slow+(1.0f-rho)*h;
+    const float slow=layer+1==depth?rho*previous_slow+(1.0f-rho)*h:previous_slow;
     cache[ama10_training_cache_index(time,layer,0,i,depth,width)]=previous_fast;
     cache[ama10_training_cache_index(time,layer,1,i,depth,width)]=previous_slow;
     cache[ama10_training_cache_index(time,layer,2,i,depth,width)]=z;
@@ -143,11 +151,12 @@ __kernel void ama10_cell_backward_derivatives(
     const float h=cache[ama10_training_cache_index(time,layer,0,i,depth,width)];
     const float p=cache[ama10_training_cache_index(time,layer,3,i,depth,width)];
     const float g=cache[ama10_training_cache_index(time,layer,5,i,depth,width)];
-    const float dnew=dh[i]+(apply_hidden?hidden_gradient[(size_t)time*width+i]:0.0f)+(1.0f-rho)*dm[i];
+    const float dnew=dh[i]+(apply_hidden?hidden_gradient[(size_t)time*width+i]:0.0f)+
+        (apply_hidden?(1.0f-rho)*dm[i]:0.0f);
     dpre[i]=dnew*g*(1.0f-p*p);
     dgate[i]=dnew*(p-h)*g*(1.0f-g);
     direct_fast[i]=dnew*(1.0f-g);
-    direct_slow[i]=rho*dm[i];
+    direct_slow[i]=apply_hidden?rho*dm[i]:dm[i];
 }
 
 __kernel void ama10_cell_backward_accumulate(

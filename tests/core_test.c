@@ -245,5 +245,23 @@ int main(void){
         ama10_optimizer_free(&direct_opt);ama10_optimizer_free(&accumulated_opt);
         ama10_model_free(&direct);ama10_model_free(&accumulated);
     }
-    puts("core forward/reset, overfit, token and modality-input gradient checks, adaptive-depth, accumulation parity, and Muon hybrid update: ok");return 0;
+    {
+        AMA10Model depth_model={0};AMA10State depth_one={0},depth_four={0};float logits_one[2],logits_four[2];
+        if(!ama10_model_init(&depth_model,2,1,1,71)||!ama10_state_init(&depth_one,1)||
+           !ama10_state_init(&depth_four,1))return 30;
+        memset(depth_model.wx,0,sizeof(float));memset(depth_model.wh,0,sizeof(float));
+        memset(depth_model.wm,0,sizeof(float));memset(depth_model.wu,0,sizeof(float));
+        memset(depth_model.bias,0,sizeof(float));depth_model.gate_bias[0]=-100.0f;
+        memset(depth_model.embed,0,2*sizeof(float));memset(depth_model.head,0,2*sizeof(float));
+        depth_one.fast[0]=depth_four.fast[0]=0.3f;depth_one.slow[0]=depth_four.slow[0]=0.8f;
+        if(!ama10_step(&depth_model,&depth_one,0,logits_one,1,2.0f)||
+           !ama10_step(&depth_model,&depth_four,0,logits_four,4,2.0f)||
+           fabsf(depth_one.fast[0]-depth_four.fast[0])>1e-6f||
+           fabsf(depth_one.slow[0]-depth_four.slow[0])>1e-6f||
+           fabsf(depth_four.slow[0]-0.7975f)>1e-6f){
+            fprintf(stderr,"slow-memory retention changed with recurrent depth\n");return 31;
+        }
+        ama10_state_free(&depth_one);ama10_state_free(&depth_four);ama10_model_free(&depth_model);
+    }
+    puts("core forward/reset, depth-invariant slow memory, overfit, token and modality-input gradient checks, adaptive-depth, accumulation parity, and Muon hybrid update: ok");return 0;
 }

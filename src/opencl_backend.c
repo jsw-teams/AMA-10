@@ -12,7 +12,7 @@ struct AMA10OpenCL {
     cl_context context;
     cl_command_queue queue;
     cl_program program;
-    cl_kernel cell,confidence,logits_kernel,adamw_update,sequence_logits,head_gradient,hidden_gradient;
+    cl_kernel cell,confidence,slow_update,logits_kernel,adamw_update,sequence_logits,head_gradient,hidden_gradient;
     cl_kernel cell_backward_derivatives,cell_backward_accumulate,training_forward_cell;
     cl_mem parameters[8];
     cl_mem fast,slow,next_fast,next_slow,confidence_buffer,logits_buffer;
@@ -92,6 +92,8 @@ AMA10OpenCL *ama10_opencl_create(const AMA10Model *m,const char *kernel_path){
     if(error!=CL_SUCCESS||!b->cell)goto fail;
     b->confidence=clCreateKernel(b->program,"ama10_recurrent_confidence",&error);
     if(error!=CL_SUCCESS||!b->confidence)goto fail;
+    b->slow_update=clCreateKernel(b->program,"ama10_slow_update",&error);
+    if(error!=CL_SUCCESS||!b->slow_update)goto fail;
     b->logits_kernel=clCreateKernel(b->program,"ama10_recurrent_logits",&error);
     if(error!=CL_SUCCESS||!b->logits_kernel)goto fail;
     b->adamw_update=clCreateKernel(b->program,"ama10_adamw_update",&error);
@@ -174,6 +176,14 @@ static int opencl_run(AMA10OpenCL *b,AMA10State *s,uint32_t token,float *logits,
         swap=b->slow;b->slow=b->next_slow;b->next_slow=swap;
         executed++;
         if(d+1>=2&&threshold<=1.0f&&confidence>=threshold)break;
+    }
+    {
+        cl_mem update_args[]={b->fast,b->slow,b->next_slow};
+        for(cl_uint i=0;i<3;i++)if(clSetKernelArg(b->slow_update,i,sizeof(cl_mem),&update_args[i])!=CL_SUCCESS)return 0;
+        cl_uint width_arg=(cl_uint)b->width;size_t update_global=b->width;
+        if(clSetKernelArg(b->slow_update,3,sizeof(width_arg),&width_arg)!=CL_SUCCESS||
+           clEnqueueNDRangeKernel(b->queue,b->slow_update,1,NULL,&update_global,NULL,0,NULL,NULL)!=CL_SUCCESS)return 0;
+        cl_mem swap=b->slow;b->slow=b->next_slow;b->next_slow=swap;
     }
     cl_mem output_args[]={b->parameters[7],b->fast,b->logits_buffer};
     for(cl_uint i=0;i<3;i++)if(clSetKernelArg(b->logits_kernel,i,sizeof(cl_mem),&output_args[i])!=CL_SUCCESS)return 0;
@@ -501,6 +511,7 @@ void ama10_opencl_destroy(AMA10OpenCL *b){
     if(b->head_gradient)clReleaseKernel(b->head_gradient);
     if(b->sequence_logits)clReleaseKernel(b->sequence_logits);
     if(b->confidence)clReleaseKernel(b->confidence);
+    if(b->slow_update)clReleaseKernel(b->slow_update);
     if(b->cell)clReleaseKernel(b->cell);
     if(b->program)clReleaseProgram(b->program);
     if(b->queue)clReleaseCommandQueue(b->queue);

@@ -35,4 +35,23 @@ int main(int argc,char**argv){if(argc!=2)return 2;float *patches=(float*)malloc(
    if(!ok){fprintf(stderr,"1080x640 image-code output failed\n");return 1;}
   }
  }
- if(!ok){fprintf(stderr,"image codebook, quantization, serialization, metrics, or PPM round trip failed\n");return 1;}puts("image VQ fitting, serialization, variable-resolution grids, 1080x640 decode, metrics, and PPM roundtrip: ok");return 0;}
+ {
+  enum{N=8,D=8*8*3};float samples[N*D];AMA10Image source[N]={{0}},decoded={0},decoded_rq={0};
+  AMA10ImageCodebook base={0},rq={0},loaded_rq={0};char rqpath[1024];snprintf(rqpath,sizeof(rqpath),"%s/image-gen-rq-test.vq",argv[1]);
+  int rq_ok=1;for(size_t i=0;i<N;i++){source[i].width=8;source[i].height=8;source[i].rgb=(unsigned char*)malloc(D);if(!source[i].rgb){rq_ok=0;break;}
+   for(size_t j=0;j<D;j++){double q=0.06*(double)i+((i&1)?0.1:-0.1)*(double)(j%9)/8.0;if(q<0)q=0;if(q>1)q=1;unsigned char v=(unsigned char)(q*255.0+0.5);source[i].rgb[j]=v;samples[i*D+j]=(float)v/255.0f;}}
+  if(rq_ok)rq_ok=ama10_image_codebook_fit(samples,N,D,2,8,8,777,&base)&&ama10_image_codebook_fit(samples,N,D,2,8,8,777,&rq)&&
+     ama10_image_codebook_fit_residual(samples,N,&rq)&&rq.levels==2&&rq.residual_centers&&
+     ama10_image_codebook_save(&rq,rqpath)&&ama10_image_codebook_load(&loaded_rq,rqpath)&&loaded_rq.levels==2;
+  double mse_base=0,mse_rq=0;
+  for(size_t i=0;i<N&&rq_ok;i++){uint32_t *cb=NULL,*cr=NULL;size_t nb=0,nr=0;
+   rq_ok=ama10_image_encode_codes(&source[i],&base,&cb,&nb)&&nb==1&&ama10_image_encode_codes(&source[i],&loaded_rq,&cr,&nr)&&nr==2&&
+      ama10_image_decode_codes_size(&base,cb,nb,8,8,&decoded)&&ama10_image_decode_codes_size(&loaded_rq,cr,nr,8,8,&decoded_rq);
+   if(rq_ok)for(size_t j=0;j<D;j++){double a=(double)source[i].rgb[j]-decoded.rgb[j],b=(double)source[i].rgb[j]-decoded_rq.rgb[j];mse_base+=a*a;mse_rq+=b*b;}
+   free(cb);free(cr);ama10_image_free(&decoded);ama10_image_free(&decoded_rq);
+  }
+  for(size_t i=0;i<N;i++){ama10_image_free(&source[i]);}
+  ama10_image_codebook_free(&base);ama10_image_codebook_free(&rq);ama10_image_codebook_free(&loaded_rq);
+  if(!rq_ok||!(mse_rq<mse_base)){fprintf(stderr,"residual VQ did not improve patch reconstruction: base=%g residual=%g\n",mse_base,mse_rq);return 1;}
+ }
+ if(!ok){fprintf(stderr,"image codebook, residual quantization, serialization, metrics, or PPM round trip failed\n");return 1;}puts("image VQ/RQ fitting, serialization, variable-resolution grids, 1080x640 decode, metrics, and PPM roundtrip: ok");return 0;}

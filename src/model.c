@@ -385,12 +385,12 @@ int ama10_step_features(const AMA10Model *m,AMA10State *s,const float *x,float *
             proposal[i]=tanhf(drive); next[i]=(1.0f-g)*s->fast[i]+g*proposal[i]; activity+=fabsf(next[i]-s->fast[i]);
         }
         memcpy(s->fast,next,w*sizeof(float));
-        /* Slow trace is a distinct, conservative plastic memory. */
-        for(size_t i=0;i<w;i++)s->slow[i]=0.995f*s->slow[i]+0.005f*s->fast[i];
         s->steps++;
         float confidence=1.0f/(1.0f+activity/(float)w);
         if(d+1>=2 && threshold<=1.0f && confidence>=threshold)break;
     }
+    /* Slow memory advances once per token, independent of recurrent depth. */
+    for(size_t i=0;i<w;i++)s->slow[i]=0.995f*s->slow[i]+0.005f*s->fast[i];
     for(size_t k=0;k<m->vocabulary;k++){
         float z=0;for(size_t j=0;j<w;j++)z+=m->head[k*w+j]*s->fast[j];logits[k]=z;
     }
@@ -714,7 +714,7 @@ static int train_sequence_internal(AMA10Model *m,AMA10Optimizer *opt,AMA10State 
             for(size_t i=0;i<w;i++){
                 unsigned previous_depth=t?used_depth[t-1]:0;
                 C(t,d,0,i)=d?C(t,d-1,6,i):(t?C(t-1,previous_depth-1,6,i):(state?state->fast[i]:0.0f));
-                C(t,d,1,i)=d?C(t,d-1,7,i):(t?C(t-1,previous_depth-1,7,i):(state?state->slow[i]:0.0f));
+                C(t,d,1,i)=d?C(t,d-1,1,i):(t?C(t-1,previous_depth-1,7,i):(state?state->slow[i]:0.0f));
             }
             for(size_t i=0;i<w;i++){
                 float z=m->bias[i]+input_projection[t*w+i];
@@ -726,7 +726,7 @@ static int train_sequence_internal(AMA10Model *m,AMA10Optimizer *opt,AMA10State 
                 float proposal=tanhf(z),gate=sigmoid(q);
                 C(t,d,2,i)=z;C(t,d,3,i)=proposal;C(t,d,4,i)=q;C(t,d,5,i)=gate;
                 C(t,d,6,i)=(1.0f-gate)*C(t,d,0,i)+gate*proposal;
-                C(t,d,7,i)=rho*C(t,d,1,i)+(1.0f-rho)*C(t,d,6,i);
+                C(t,d,7,i)=C(t,d,1,i);
             }
             if(halt_threshold>=0.0f&&d+1>=2){
                 float activity=0.0f;
@@ -735,6 +735,7 @@ static int train_sequence_internal(AMA10Model *m,AMA10Optimizer *opt,AMA10State 
                 if(confidence>=halt_threshold){used_depth[t]=d+1;break;}
             }
         }
+        for(size_t i=0;i<w;i++)C(t,used_depth[t]-1,7,i)=rho*C(t,used_depth[t]-1,1,i)+(1.0f-rho)*C(t,used_depth[t]-1,6,i);
         if(opencl)continue;
         if(loss_mask&&!loss_mask[t])continue;
         float mx=-INFINITY;
@@ -795,8 +796,9 @@ static int train_sequence_internal(AMA10Model *m,AMA10Optimizer *opt,AMA10State 
             memset(dh0,0,w*sizeof(float));memset(dm0,0,w*sizeof(float));
             for(size_t i=0;i<w;i++){
                 float h=C(t,d,0,i),proposal=C(t,d,3,i),gate=C(t,d,5,i);
-                float dnew=dh[i]+(1.0f-rho)*dm[i];
-                dm0[i]+=rho*dm[i];
+                int final_depth=(d+1==used_depth[t]);
+                float dnew=dh[i]+(final_depth?(1.0f-rho)*dm[i]:0.0f);
+                dm0[i]+=final_depth?rho*dm[i]:dm[i];
                 float dp=dnew*gate;
                 float dg=dnew*(proposal-h);
                 dpre[i]=dp*(1.0f-proposal*proposal);
