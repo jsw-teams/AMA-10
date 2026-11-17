@@ -148,16 +148,16 @@ int main(void){
         AMA10Optimizer token_opt,feature_opt;
         AMA10State token_state,feature_state;
         const uint32_t input[]={1,2,3,1},target[]={2,3,4,0};
-        float features[16],feature_gradients[16],token_loss=0.0f,feature_loss=0.0f;
+        float features[24],feature_gradients[24],token_loss=0.0f,feature_loss=0.0f;
         double token_eval=0.0,feature_eval=0.0,plus=0.0,minus=0.0;
-        if(!ama10_model_init(&token_model,6,4,4,661)||
-           !ama10_model_init(&feature_model,6,4,4,661)||
-           !ama10_model_init(&reference,6,4,4,661)||
+        if(!ama10_model_init(&token_model,6,4,6,661)||
+           !ama10_model_init(&feature_model,6,4,6,661)||
+           !ama10_model_init(&reference,6,4,6,661)||
            !ama10_optimizer_init(&token_opt,&token_model)||
            !ama10_optimizer_init(&feature_opt,&feature_model)||
            !ama10_state_init(&token_state,4)||!ama10_state_init(&feature_state,4))return 39;
-        for(size_t t=0;t<4;t++)for(size_t j=0;j<4;j++)
-            features[t*4+j]=token_model.embed[j*token_model.vocabulary+input[t]];
+        for(size_t t=0;t<4;t++)for(size_t j=0;j<6;j++)
+            features[t*6+j]=token_model.embed[j*token_model.vocabulary+input[t]];
         if(!ama10_eval_loss(&token_model,input,target,4,2,&token_eval)||
            !ama10_eval_feature_loss(&feature_model,features,target,4,2,&feature_eval)||
            fabs(token_eval-feature_eval)>1.0e-12||
@@ -174,7 +174,7 @@ int main(void){
             if(count_a!=count_b||memcmp(a,b,count_a*sizeof(float)))return 41;
         }
         size_t feature_index=0;
-        for(size_t i=1;i<16;i++)if(fabsf(feature_gradients[i])>fabsf(feature_gradients[feature_index]))feature_index=i;
+        for(size_t i=1;i<24;i++)if(fabsf(feature_gradients[i])>fabsf(feature_gradients[feature_index]))feature_index=i;
         float old=features[feature_index],epsilon=0.001f;
         features[feature_index]=old+epsilon;
         if(!ama10_eval_feature_loss(&reference,features,target,4,2,&plus))return 42;

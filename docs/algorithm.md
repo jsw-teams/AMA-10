@@ -5,12 +5,14 @@ This is a falsifiable starting design, not a claim of achieved language capabili
 For token embedding `x_t`, microstep `d` computes
 
 ```
-u = tanh(Wx x_t + Wh h[d] + Wm m[d] + b)
+u = tanh(Wx x_t + Wh h[d] + Wm m[t] + b)
 g = sigmoid(Wx x_t + Wu h[d] + bg)
 h[d+1] = (1-g) * h[d] + g * u
-m[d+1] = rho*m[d] + (1-rho)*h[d+1]
+m[t+1] = rho*m[t] + (1-rho)*h[D]
 z_t = W_vocab h[D]
 ```
+
+The slow trace is held fixed through the token's recurrent microsteps and advances once using the final fast state. This keeps its time constant independent of recurrent depth. CPU inference caches `Wx x_t` once per token and reuses caller-owned per-state scratch vectors; it does not allocate recurrent work arrays in the token hot path. Training already caches the input projection over the sequence before recurrent-depth evaluation.
 
 Here `g` is elementwise and `Wu` is a dense matrix. The input projection `Wx x_t` is deliberately shared by the candidate and the write gate: each token can directly affect its fast-state write, without adding a second input matrix. This weight tying is an AMA-10 design choice that needs ablation against a separate gate projection and a recurrent-only gate. The implementation uses `rho=0.995`, an experimentally unvalidated initial constant. Both inference and the adaptive trainer can stop after at least two microsteps when `c_d = 1 / (1 + mean(abs(h[d+1]-h[d])))` reaches a caller-supplied threshold, or at the maximum depth. The discrete stopping decision is treated as fixed during BPTT; gradients propagate through every executed microstep. This activity criterion is a compute heuristic, not a learned halting policy. The CLI baseline still uses fixed depth two. `evaluate <checkpoint> <tokenizer> <data> <max-depth> <threshold>` reports full-stream fixed and adaptive token NLL plus mean executed recurrent depth, allowing thresholds to be compared at matched data and model weights.
 
@@ -38,7 +40,7 @@ The optimizer can use AdamW (`beta1=0.9`, `beta2=0.999`, `epsilon=1e-8`) for all
 
 With an OpenCL build, `--opencl-adamw` routes recurrent sequence forward propagation, output-head projection, sequential reverse-time BPTT, and the accumulated, globally clipped AdamW update through OpenCL. The CPU handles data loading and loss orchestration. The trajectory remains on device between forward and backward; only per-token hidden vectors return for loss calculation. Weights synchronize at sequence start and after each update; first and second moments stay on device and synchronize before checkpoint writes. Only AdamW is implemented. CPU/GPU tests compare all eight accumulated parameter-gradient groups, then compare weights and both moment arrays over consecutive updates. Current end-to-end trials at widths 64, 256, and 512 were slower than CPU, though the gap narrowed with width, so the option remains experimental.
 
-For batch one and width `H`, input width `E`, vocabulary `V`, and fixed depth `D`, dense forward work is `O(T*D*(H^2+HE+VH))`; adaptive depth changes the recurrent term to `sum_t D_t*(H^2+HE)`, while vocabulary projection still costs `O(T*VH)`. Recurrent inference state is `O(H)` per stream, excluding model weights. The CPU implementation uses dense row-major matrices and allocates temporary arrays during each forward call. This is a correctness-oriented baseline, not an optimized engine.
+For batch one and width `H`, input width `E`, vocabulary `V`, and fixed depth `D`, dense forward work is `O(T*(HE + D*H^2 + VH))`; adaptive depth changes the recurrent term to `sum_t D_t*H^2`, while vocabulary projection still costs `O(T*VH)`. Recurrent inference state and its reusable workspace are `O(H)` per stream, excluding model weights. This is a dense CPU baseline; measured microbenchmark results are recorded in the experiment log and should not be treated as end-to-end training throughput.
 
 Next evidence gates: broaden finite-difference coverage; compare fixed/adaptive depth at matched compute; validate memory reset/carry and numerical stability; measure held-out text and free generation on a larger licensed corpus. Add sparse routing only after the dense gradient path passes more complete numerical checks.
 

@@ -147,6 +147,7 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
                       float learning_rate,float learning_rate_decay,size_t target_vocab,size_t accumulation_steps,
                       uint32_t optimizer_algorithm,
                       uint64_t tokenizer_sample_limit,
+                      const char *tokenizer_file,
                       const char *checkpoint,int resume,int opencl_adamw,size_t model_width,
                       const char *metrics_csv){
     unsigned char *sample=NULL,*generated_bytes=NULL;
@@ -173,8 +174,12 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
     }
     if(n<64||nval<2){fprintf(stderr,"train/validation text is too short\n");goto fail;}
     if(!resume){
-        if(!read_tokenizer_sample(train_path,n,tokenizer_sample_limit,&sample,&sample_bytes)||sample_bytes<64||
-           !ama10_tokenizer_train(&tokenizer,sample,sample_bytes,target_vocab)){
+        if(tokenizer_file){
+            if(!ama10_tokenizer_load(&tokenizer,tokenizer_file)||tokenizer.vocabulary_size!=target_vocab){
+                fprintf(stderr,"supplied tokenizer could not be loaded or its vocabulary does not match\n");goto fail;
+            }
+        }else if(!read_tokenizer_sample(train_path,n,tokenizer_sample_limit,&sample,&sample_bytes)||sample_bytes<64||
+                 !ama10_tokenizer_train(&tokenizer,sample,sample_bytes,target_vocab)){
             fprintf(stderr,"bounded-sample tokenizer training failed\n");goto fail;
         }
         free(sample);sample=NULL;
@@ -870,7 +875,7 @@ done:
     return ok?0:1;
 }
 static void usage(const char *exe){
-    fprintf(stderr,"usage:\n  %s train <train-utf8-file> <validation-utf8-file> [total-updates=1000] [learning-rate=0.001] [vocabulary=512] [checkpoint-path] [--width N] [--accumulation N] [--lr-decay D] [--optimizer adamw|muon] [--tokenizer-sample-bytes N] [--metrics-csv path] [--resume] [--opencl-adamw]\n  %s generate <model> <tokenizer> <prompt-file> <output-file> [tokens=128] [cpu|opencl] [repetition-penalty=0] [adapter.lora]\n  %s export-safetensors <checkpoint-or-model.safetensors> <output.safetensors>\n  %s evaluate <checkpoint-or-model> <tokenizer> <utf8-data-file> [adaptive-max-depth halt-threshold] [state-reset-period]\n      or: evaluate <checkpoint-or-model> <tokenizer> <utf8-data-file> <state-reset-period>\n  %s evaluate-documents <checkpoint-or-model> <tokenizer> <form-feed-separated-documents.txt>\n  %s profile <tokenizer> <utf8-data-file>\n  %s grow-vocabulary <checkpoint> <tokenizer> <training-file> <target-vocabulary> <output-checkpoint>\n",exe,exe,exe,exe,exe,exe,exe);
+    fprintf(stderr,"usage:\n  %s train <train-utf8-file> <validation-utf8-file> [total-updates=1000] [learning-rate=0.001] [vocabulary=512] [checkpoint-path] [--width N] [--accumulation N] [--lr-decay D] [--optimizer adamw|muon] [--tokenizer-sample-bytes N] [--tokenizer-file path] [--metrics-csv path] [--resume] [--opencl-adamw]\n  %s generate <model> <tokenizer> <prompt-file> <output-file> [tokens=128] [cpu|opencl] [repetition-penalty=0] [adapter.lora]\n  %s export-safetensors <checkpoint-or-model.safetensors> <output.safetensors>\n  %s evaluate <checkpoint-or-model> <tokenizer> <utf8-data-file> [adaptive-max-depth halt-threshold] [state-reset-period]\n      or: evaluate <checkpoint-or-model> <tokenizer> <utf8-data-file> <state-reset-period>\n  %s evaluate-documents <checkpoint-or-model> <tokenizer> <form-feed-separated-documents.txt>\n  %s profile <tokenizer> <utf8-data-file>\n  %s grow-vocabulary <checkpoint> <tokenizer> <training-file> <target-vocabulary> <output-checkpoint>\n",exe,exe,exe,exe,exe,exe,exe);
 }
 static int export_safetensors(const char *source,const char *destination){
     AMA10Model model={0};AMA10Tokenizer tokenizer={0};AMA10Optimizer optimizer={0};AMA10State state={0};
@@ -931,7 +936,7 @@ int main(int argc,char **argv){
             }}
         return generate_file(argv[2],argv[3],argv[4],argv[5],count,use_opencl,repetition_penalty,argc==10?argv[9]:NULL);
     }
-    if(strcmp(argv[1],"train")!=0||argc<4||argc>22){usage(argv[0]);return 2;}
+    if(strcmp(argv[1],"train")!=0||argc<4||argc>24){usage(argv[0]);return 2;}
     size_t updates=1000;
     if(argc>=5){char *end=NULL;errno=0;unsigned long long x=strtoull(argv[4],&end,10);
         if(errno||!end||*end||x==0||x>SIZE_MAX){fprintf(stderr,"invalid update count\n");return 2;}updates=(size_t)x;}
@@ -943,7 +948,7 @@ int main(int argc,char **argv){
         if(errno||!end||*end||x<256||x>UINT32_MAX||x>SIZE_MAX){fprintf(stderr,"invalid tokenizer vocabulary size\n");return 2;}vocab=(size_t)x;}
     size_t accumulation=1,model_width=32;float lr_decay=0.0f;uint64_t tokenizer_sample=UINT64_C(8)*1024u*1024u;
     int resume=0,opencl_adamw=0,have_width=0,have_accumulation=0,have_lr_decay=0,have_tokenizer_sample=0,have_optimizer=0;
-    const char *metrics_csv=NULL;
+    int have_tokenizer_file=0;const char *tokenizer_file=NULL,*metrics_csv=NULL;
     uint32_t optimizer_algorithm=AMA10_OPT_ADAMW;
     for(int i=8;i<argc;i++){
         if(strcmp(argv[i],"--resume")==0){if(resume){fprintf(stderr,"duplicate --resume\n");return 2;}resume=1;}
@@ -972,6 +977,9 @@ int main(int argc,char **argv){
             char *end=NULL;errno=0;unsigned long long x=strtoull(argv[++i],&end,10);
             if(errno||!end||*end||x<64||x>SIZE_MAX){fprintf(stderr,"invalid tokenizer sample size\n");return 2;}
             tokenizer_sample=(uint64_t)x;have_tokenizer_sample=1;
+        }else if(strcmp(argv[i],"--tokenizer-file")==0){
+            if(have_tokenizer_file||i+1>=argc||!*argv[i+1]){fprintf(stderr,"invalid --tokenizer-file option\n");return 2;}
+            tokenizer_file=argv[++i];have_tokenizer_file=1;
         }else if(strcmp(argv[i],"--metrics-csv")==0){
             if(metrics_csv||i+1>=argc){fprintf(stderr,"invalid --metrics-csv option\n");return 2;}
             metrics_csv=argv[++i];if(!*metrics_csv){fprintf(stderr,"metrics CSV path cannot be empty\n");return 2;}
@@ -979,6 +987,8 @@ int main(int argc,char **argv){
     }
     if(opencl_adamw&&optimizer_algorithm!=AMA10_OPT_ADAMW){fprintf(stderr,"--opencl-adamw currently supports AdamW only\n");return 2;}
     if(resume&&argc<8){fprintf(stderr,"resume requires a checkpoint path\n");return 2;}
+    if(resume&&tokenizer_file){fprintf(stderr,"--tokenizer-file cannot be used with --resume\n");return 2;}
     return train_file(argv[2],argv[3],updates,lr,lr_decay,vocab,accumulation,optimizer_algorithm,tokenizer_sample,
+                      tokenizer_file,
                       argc>=8?argv[7]:NULL,resume,opencl_adamw,model_width,metrics_csv);
 }

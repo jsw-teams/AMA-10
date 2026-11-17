@@ -356,10 +356,13 @@ int ama10_model_load_safetensors(AMA10Model *m,const char *path){
 int ama10_state_init(AMA10State *s,size_t w) {
     if(!s||!w||w>SIZE_MAX/sizeof(float)) return 0;
     memset(s,0,sizeof(*s)); s->fast=(float*)calloc(w,sizeof(float)); s->slow=(float*)calloc(w,sizeof(float));
-    if(!s->fast||!s->slow){ama10_state_free(s);return 0;} s->width=w; return 1;
+    s->input_projection=(float*)malloc(w*sizeof(float));
+    s->scratch_next=(float*)malloc(w*sizeof(float));
+    s->scratch_proposal=(float*)malloc(w*sizeof(float));
+    if(!s->fast||!s->slow||!s->input_projection||!s->scratch_next||!s->scratch_proposal){ama10_state_free(s);return 0;} s->width=w; return 1;
 }
 void ama10_state_reset(AMA10State *s){if(s&&s->fast&&s->slow){memset(s->fast,0,s->width*sizeof(float));memset(s->slow,0,s->width*sizeof(float));s->steps=0;}}
-void ama10_state_free(AMA10State *s){if(s){free(s->fast);free(s->slow);memset(s,0,sizeof(*s));}}
+void ama10_state_free(AMA10State *s){if(s){free(s->fast);free(s->slow);free(s->input_projection);free(s->scratch_next);free(s->scratch_proposal);memset(s,0,sizeof(*s));}}
 
 static float sigmoid(float x){if(x>=0){float z=expf(-x);return 1.0f/(1.0f+z);}float z=expf(x);return z/(1.0f+z);}
 int ama10_step_features(const AMA10Model *m,AMA10State *s,const float *x,float *logits,
@@ -368,18 +371,20 @@ int ama10_step_features(const AMA10Model *m,AMA10State *s,const float *x,float *
        !max_depth||!isfinite(threshold)||threshold<0||threshold>2)return 0;
     size_t w=m->width,e=m->input_width;
     for(size_t j=0;j<e;j++)if(!isfinite(x[j]))return 0;
-    float *next=(float*)malloc(w*sizeof(float)),*proposal=(float*)malloc(w*sizeof(float));
-    if(!next||!proposal){free(next);free(proposal);return 0;}
+    float *next=s->scratch_next,*proposal=s->scratch_proposal,*input_projection=s->input_projection;
+    if(!next||!proposal||!input_projection)return 0;
+    /* Wx*x is constant across a token's recurrent microsteps. Cache it once. */
+    for(size_t i=0;i<w;i++){
+        float projected=0.0f;
+        for(size_t j=0;j<e;j++)projected+=m->wx[i*e+j]*x[j];
+        input_projection[i]=projected;
+    }
     for(unsigned d=0;d<max_depth;d++){
         float activity=0;
         for(size_t i=0;i<w;i++){
-            float drive=m->bias[i],input_drive=0.0f;
-            for(size_t j=0;j<e;j++){
-                float projected=m->wx[i*e+j]*x[j];
-                drive+=projected;input_drive+=projected;
-            }
+            float drive=m->bias[i]+input_projection[i];
             for(size_t j=0;j<w;j++)drive+=m->wh[i*w+j]*s->fast[j]+m->wm[i*w+j]*s->slow[j];
-            float gate=m->gate_bias[i]+input_drive;
+            float gate=m->gate_bias[i]+input_projection[i];
             for(size_t j=0;j<w;j++)gate+=m->wu[i*w+j]*s->fast[j];
             float g=sigmoid(gate);
             proposal[i]=tanhf(drive); next[i]=(1.0f-g)*s->fast[i]+g*proposal[i]; activity+=fabsf(next[i]-s->fast[i]);
@@ -394,14 +399,19 @@ int ama10_step_features(const AMA10Model *m,AMA10State *s,const float *x,float *
     for(size_t k=0;k<m->vocabulary;k++){
         float z=0;for(size_t j=0;j<w;j++)z+=m->head[k*w+j]*s->fast[j];logits[k]=z;
     }
-    free(next);free(proposal);return 1;
+    return 1;
 }
 int ama10_step(const AMA10Model *m,AMA10State *s,uint32_t token,float *logits,
                unsigned max_depth,float threshold){
     if(!m||token>=m->vocabulary)return 0;
-    float *x=(float*)malloc(m->input_width*sizeof(float));if(!x)return 0;
+    if(!s||!s->scratch_proposal||s->width!=m->width)return 0;
+    float *x=s->scratch_proposal;
+    int allocated=0;
+    if(m->input_width>m->width){x=(float*)malloc(m->input_width*sizeof(float));if(!x)return 0;allocated=1;}
     for(size_t j=0;j<m->input_width;j++)x[j]=m->embed[j*m->vocabulary+token];
-    int ok=ama10_step_features(m,s,x,logits,max_depth,threshold);free(x);return ok;
+    int ok=ama10_step_features(m,s,x,logits,max_depth,threshold);
+    if(allocated)free(x);
+    return ok;
 }
 int ama10_step_hidden(const AMA10Model *m,AMA10State *s,uint32_t token,float *logits,
                       float *hidden,unsigned max_depth,float threshold){

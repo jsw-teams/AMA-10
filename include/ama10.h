@@ -36,6 +36,9 @@ typedef struct {
     float *slow;
     size_t width;
     unsigned steps;
+    float *input_projection; /* reusable inference workspace; not checkpoint state */
+    float *scratch_next;
+    float *scratch_proposal;
 } AMA10State;
 
 typedef struct {
