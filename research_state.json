@@ -1,0 +1,24 @@
+{
+  "goal_status": "IN_PROGRESS",
+  "execution_status": "IN_PROGRESS",
+  "updated_at": "2026-11-19",
+  "evidence_source": "GitHub main, on-device process and filesystem inspection (2026-11-19)",
+  "active_task": "Integrate new GPU-friendly trainable recurrent architecture and real cross-modal quality supervision; do not loop on obsolete baselines",
+  "last_verified_change": "GOAL.md updated with executable protocol; on-device cleanup of obsolete untracked checkpoints and a redundant FineWeb assembly artifact",
+  "last_checkpoint": "build/ama10-continuation-10k.ama (on-device, verified present); build/text-v41-paused-u700.ama and build/text-v39-fineweb-coalesced-reduction-100.ama retained as study baselines",
+  "verified_runtime": "No ama10 training process in most recent inspection; Codex processes running; verify before launching",
+  "unverified_capabilities": [
+    "semantic text generation",
+    "image subject and spatial quality",
+    "ASR WER/CER integrated with Supervisor",
+    "TTS intelligibility and independent ASR back-translation",
+    "video temporal understanding",
+    "cross-modal gradient interference",
+    "end-to-end new recurrent architecture training",
+    "1.45B production training"
+  ],
+  "next_action": "Inspect current model/optimizer call graph, implement a genuinely trainable GPU parallel state update using affine scan in the actual shared model (including forward, backward, optimizer and free generation), and compare with existing language baseline. In the same cycle connect an actual image/ASR/TTS generation audit to Supervisor and route its earliest confirmed failure into model code modification. Do not just add tests. Before training identify and retire inactive obsolete old-model GPU jobs; never terminate user-requested processes without authorization.",
+  "blocker": null,
+  "cleanup": "41 removable obsolete untracked files were deleted on device, including 20 older .ama weight families with companion files and an unused 3.616 GB FineWeb reassembly temporary file; 5.987 GiB released. Kept source training data and key baselines.",
+  "acceptance": "All core modalities and 1.45B training must pass independent real-output evaluations; subtask completion is not whole-goal completion"
+}
