@@ -1,0 +1,30 @@
+{
+  "source": "FineWeb-Edu processed shard train-00001-of-00013",
+  "train": {
+    "file": "train-00001-of-00013-train.txt",
+    "bytes": 3615993637,
+    "sha256": "5345fe1ffa08c747e44c5a119c6074dffa169c2ee9896088d9e9ab59d95a250c",
+    "parts": [
+      {
+        "file": "train-00001-of-00013-train.part001",
+        "bytes": 1800000000,
+        "sha256": "9ef828b4982805b03770c56c6f80325d171784327cbd261a4f4ec985f5303162"
+      },
+      {
+        "file": "train-00001-of-00013-train.part002",
+        "bytes": 1800000000,
+        "sha256": "b81fd388f20d14da06abd8329e6d324fb8e910aeeda47e5bc4a15ad2fae14c0b"
+      },
+      {
+        "file": "train-00001-of-00013-train.part003",
+        "bytes": 15993637,
+        "sha256": "a3cc66209e2ba852fa26387d47f45614df16eba1018f50fd29dca15542a5a673"
+      }
+    ]
+  },
+  "validation": {
+    "file": "train-00001-of-00013-validation.txt",
+    "bytes": 188435943,
+    "sha256": "09d22ac3db549c44068ac033e8a20770c9bf83262d32178a47952a892bd9673b"
+  }
+}

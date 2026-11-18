@@ -2,3 +2,6 @@ build/text-v41-paused-u700.ama filter=lfs diff=lfs merge=lfs -text
 checkpoints/*.amm filter=lfs diff=lfs merge=lfs -text
 checkpoints/*.enc filter=lfs diff=lfs merge=lfs -text
 checkpoints/*.ama filter=lfs diff=lfs merge=lfs -text
+data/analysis_upload/fineweb_edu/*.part filter=lfs diff=lfs merge=lfs -text
+data/analysis_upload/fineweb_edu/*validation.txt filter=lfs diff=lfs merge=lfs -text
+data/analysis_upload/fineweb_edu/*.part??? filter=lfs diff=lfs merge=lfs -text

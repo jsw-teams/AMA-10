@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "dataset_id": "fineweb_edu",
+  "dataset_name": "FineWeb-Edu",
+  "source_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+  "source_shard": "data/CC-MAIN-2016-07/train-00001-of-00013.parquet",
+  "source_url": "https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu/resolve/87f09149ef4734204d70ed1d046ddc9ca3f2b8f9/data/CC-MAIN-2016-07/train-00001-of-00013.parquet",
+  "raw_bytes": 2358493358,
+  "raw_sha256": "940520f9f41073006e4ec95473761cbe66a84f31316c106c3d2d3eda9eb56b89",
+  "processed_path": "data/processed/fineweb_edu/train-00001-of-00013.txt",
+  "processed_bytes": 3804429580,
+  "processed_sha256": "f3a1b12771b1258d61791a0adeb8450c9a8f4bb92c49f6c55da58d172f846a23",
+  "rows": 759858,
+  "unique_documents": 759857,
+  "within_shard_duplicates": 1,
+  "invalid_utf8_documents": 0,
+  "empty_documents": 0,
+  "score_filtered_documents": 0,
+  "note": "Source score field was null for all rows; no score threshold could be applied.",
+  "split_policy": "deterministic document-level FNV-1a, 5 percent validation, v1",
+  "tokenization": "complete",
+  "training": "10000_updates_completed_partial_corpus",
+  "splits": [
+    {
+      "path": "data/processed/fineweb_edu/train-00001-of-00013-train.txt",
+      "sha256": "5345FE1FFA08C747E44C5A119C6074DFFA169C2EE9896088D9E9AB59D95A250C",
+      "bytes": 3615993637,
+      "documents": 721641
+    },
+    {
+      "path": "data/processed/fineweb_edu/train-00001-of-00013-validation.txt",
+      "sha256": "09D22AC3DB549C44068AC033E8A20770C9BF83262D32178A47952A892BD9673B",
+      "bytes": 188435943,
+      "documents": 38216
+    }
+  ],
+  "token_caches": [
+    {
+      "split": "train",
+      "raw_bytes": 3615993637,
+      "cache_bytes": 2854668200,
+      "token_id_width": 2,
+      "path": "build/train-045231614bd7d0f9-4a79ea608e38df92.ama10ds",
+      "valid_tokens": 1427334072
+    },
+    {
+      "split": "validation",
+      "raw_bytes": 188435943,
+      "cache_bytes": 148636416,
+      "token_id_width": 2,
+      "path": "build/validation-522e4b475992b231-4a79ea608e38df92.ama10ds",
+      "valid_tokens": 74318180
+    }
+  ],
+  "tokenizer": {
+    "tokenizer_fingerprint": "5366578131412508562",
+    "vocabulary_size": 1024,
+    "implementation": "AMA-10 C11 byte-fallback BPE",
+    "training_sample_bytes": 8388608
+  }
+}
