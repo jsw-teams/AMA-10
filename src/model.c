@@ -10,6 +10,11 @@
 #include <string.h>
 #include <stdio.h>
 
+int ama10_affine_train_sequence_internal(AMA10Model *,AMA10Optimizer *,AMA10State *,
+ const uint32_t *,const float *,const unsigned char *,const unsigned char *,
+ const uint32_t *,const uint32_t *,const uint32_t *,const float *,size_t,unsigned,
+ float,float,float,AMA10Gradients *,float *,float *,float *,void *);
+
 static uint32_t rng_next(uint64_t *s) {
     *s ^= *s >> 12; *s ^= *s << 25; *s ^= *s >> 27;
     return (uint32_t)((*s * UINT64_C(2685821657736338717)) >> 32);
@@ -359,46 +364,58 @@ int ama10_state_init(AMA10State *s,size_t w) {
     s->input_projection=(float*)malloc(w*sizeof(float));
     s->scratch_next=(float*)malloc(w*sizeof(float));
     s->scratch_proposal=(float*)malloc(w*sizeof(float));
-    if(!s->fast||!s->slow||!s->input_projection||!s->scratch_next||!s->scratch_proposal){ama10_state_free(s);return 0;} s->width=w; return 1;
+    s->reasoning=(float*)malloc(w*sizeof(float));
+    if(!s->fast||!s->slow||!s->input_projection||!s->scratch_next||!s->scratch_proposal||!s->reasoning){ama10_state_free(s);return 0;} s->width=w; return 1;
 }
 void ama10_state_reset(AMA10State *s){if(s&&s->fast&&s->slow){memset(s->fast,0,s->width*sizeof(float));memset(s->slow,0,s->width*sizeof(float));s->steps=0;}}
-void ama10_state_free(AMA10State *s){if(s){free(s->fast);free(s->slow);free(s->input_projection);free(s->scratch_next);free(s->scratch_proposal);memset(s,0,sizeof(*s));}}
+void ama10_state_free(AMA10State *s){if(s){free(s->fast);free(s->slow);free(s->input_projection);free(s->scratch_next);free(s->scratch_proposal);free(s->reasoning);memset(s,0,sizeof(*s));}}
 
 static float sigmoid(float x){if(x>=0){float z=expf(-x);return 1.0f/(1.0f+z);}float z=expf(x);return z/(1.0f+z);}
+static double distribution_entropy(const float *logits,size_t n){
+    float maximum=logits[0];for(size_t i=1;i<n;i++)if(logits[i]>maximum)maximum=logits[i];
+    double total=0.0;for(size_t i=0;i<n;i++)total+=exp((double)logits[i]-(double)maximum);
+    if(!(total>0.0)||!isfinite(total))return INFINITY;
+    double entropy=0.0;for(size_t i=0;i<n;i++){double p=exp((double)logits[i]-(double)maximum)/total;if(p>0.0)entropy-=p*log(p);}
+    return entropy;
+}
 int ama10_step_features(const AMA10Model *m,AMA10State *s,const float *x,float *logits,
                         unsigned max_depth,float threshold){
     if(!m||!s||!x||!logits||!s->fast||!s->slow||s->width!=m->width||
-       !max_depth||!isfinite(threshold)||threshold<0||threshold>2)return 0;
+       !max_depth||s->steps==UINT_MAX||!isfinite(threshold)||threshold<0||threshold>2)return 0;
     size_t w=m->width,e=m->input_width;
     for(size_t j=0;j<e;j++)if(!isfinite(x[j]))return 0;
-    float *next=s->scratch_next,*proposal=s->scratch_proposal,*input_projection=s->input_projection;
-    if(!next||!proposal||!input_projection)return 0;
-    /* Wx*x is constant across a token's recurrent microsteps. Cache it once. */
+    float *next=s->scratch_next,*proposal=s->scratch_proposal,*projected=s->input_projection;
+    if(!next||!proposal||!projected||!s->reasoning)return 0;
     for(size_t i=0;i<w;i++){
-        float projected=0.0f;
-        for(size_t j=0;j<e;j++)projected+=m->wx[i*e+j]*x[j];
-        input_projection[i]=projected;
+        float z=0.0f;for(size_t j=0;j<e;j++)z+=m->wx[i*e+j]*x[j];
+        projected[i]=z;
     }
+    for(size_t i=0;i<w;i++){
+        float gate_logit=m->gate_bias[i];
+        for(size_t j=0;j<w;j++)gate_logit+=m->wh[i*w+j]*projected[j];
+        float gate=sigmoid(gate_logit);
+        proposal[i]=tanhf(projected[i]+m->bias[i]);
+        next[i]=gate*s->fast[i]+proposal[i];
+    }
+    for(size_t i=0;i<w;i++){
+        float gate_logit=m->gate_bias[i];for(size_t j=0;j<w;j++)gate_logit+=m->wh[i*w+j]*projected[j];
+        float gate=sigmoid(gate_logit);s->slow[i]=gate*s->slow[i]+(1.0f-gate)*next[i];
+    }
+    memcpy(s->fast,next,w*sizeof(float));
+    for(size_t i=0;i<w;i++)projected[i]=s->fast[i]+s->slow[i];
+    float *current=proposal,*following=next;memcpy(current,projected,w*sizeof(float));
+    double previous_entropy=INFINITY;
+    unsigned executed=0;
     for(unsigned d=0;d<max_depth;d++){
-        float activity=0;
-        for(size_t i=0;i<w;i++){
-            float drive=m->bias[i]+input_projection[i];
-            for(size_t j=0;j<w;j++)drive+=m->wh[i*w+j]*s->fast[j]+m->wm[i*w+j]*s->slow[j];
-            float gate=m->gate_bias[i]+input_projection[i];
-            for(size_t j=0;j<w;j++)gate+=m->wu[i*w+j]*s->fast[j];
-            float g=sigmoid(gate);
-            proposal[i]=tanhf(drive); next[i]=(1.0f-g)*s->fast[i]+g*proposal[i]; activity+=fabsf(next[i]-s->fast[i]);
-        }
-        memcpy(s->fast,next,w*sizeof(float));
-        s->steps++;
-        float confidence=1.0f/(1.0f+activity/(float)w);
-        if(d+1>=2 && threshold<=1.0f && confidence>=threshold)break;
+        for(size_t i=0;i<w;i++){float z=0.0f;for(size_t j=0;j<w;j++)z+=m->wu[i*w+j]*current[j]+m->wm[i*w+j]*projected[j];following[i]=tanhf(z);}
+        for(size_t k=0;k<m->vocabulary;k++){float z=0.0f;for(size_t j=0;j<w;j++)z+=m->head[k*w+j]*following[j];logits[k]=z;}
+        double entropy=distribution_entropy(logits,m->vocabulary);
+        executed=d+1;
+        float *swap=current;current=following;following=swap;
+        if(d+1>=2&&previous_entropy-entropy<=threshold)break;
+        previous_entropy=entropy;
     }
-    /* Slow memory advances once per token, independent of recurrent depth. */
-    for(size_t i=0;i<w;i++)s->slow[i]=0.995f*s->slow[i]+0.005f*s->fast[i];
-    for(size_t k=0;k<m->vocabulary;k++){
-        float z=0;for(size_t j=0;j<w;j++)z+=m->head[k*w+j]*s->fast[j];logits[k]=z;
-    }
+    memcpy(s->reasoning,current,w*sizeof(float));s->steps+=executed;
     return 1;
 }
 int ama10_step(const AMA10Model *m,AMA10State *s,uint32_t token,float *logits,
@@ -416,7 +433,7 @@ int ama10_step(const AMA10Model *m,AMA10State *s,uint32_t token,float *logits,
 int ama10_step_hidden(const AMA10Model *m,AMA10State *s,uint32_t token,float *logits,
                       float *hidden,unsigned max_depth,float threshold){
     if(!hidden||!ama10_step(m,s,token,logits,max_depth,threshold))return 0;
-    memcpy(hidden,s->fast,m->width*sizeof(float));return 1;
+    memcpy(hidden,s->reasoning,m->width*sizeof(float));return 1;
 }
 
 #define AMA_PARAMS 8
@@ -512,6 +529,63 @@ void ama10_gradients_free(AMA10Gradients *g){
     if(!g)return;
     if(g->values)for(size_t k=0;k<g->parameter_count;k++)free(g->values[k]);
     free(g->values);memset(g,0,sizeof(*g));
+}
+int ama10_gradients_combine_tasks_with_weights(AMA10Gradients *destination,
+                                  const AMA10Gradients *task_a,const AMA10Gradients *task_b,
+                                  int method,double *cosine_out,double *task_a_weight_out){
+    if(!destination||!task_a||!task_b||destination==task_a||destination==task_b||task_a==task_b||
+       !destination->values||!task_a->values||!task_b->values||!task_a->tokens||!task_b->tokens||
+       (method<0||method>2)||destination->parameter_count!=AMA_PARAMS||
+       task_a->parameter_count!=AMA_PARAMS||task_b->parameter_count!=AMA_PARAMS||
+       destination->width!=task_a->width||destination->width!=task_b->width||
+       destination->input_width!=task_a->input_width||destination->input_width!=task_b->input_width||
+       destination->vocabulary!=task_a->vocabulary||destination->vocabulary!=task_b->vocabulary||
+       task_a->tokens>UINT64_MAX-task_b->tokens)return 0;
+    AMA10Model shape={0};shape.width=destination->width;shape.input_width=destination->input_width;
+    shape.vocabulary=destination->vocabulary;float *unused[AMA_PARAMS];size_t sizes[AMA_PARAMS];
+    parameter_views(&shape,unused,sizes);double dot=0.0,norm_a=0.0,norm_b=0.0;
+    for(size_t k=0;k<AMA_PARAMS;k++){
+        if(!destination->values[k]||!task_a->values[k]||!task_b->values[k])return 0;
+        for(size_t i=0;i<sizes[k];i++){
+            double a=(double)task_a->values[k][i]/(double)task_a->tokens;
+            double b=(double)task_b->values[k][i]/(double)task_b->tokens;
+            if(!isfinite(a)||!isfinite(b))return 0;
+            dot+=a*b;norm_a+=a*a;norm_b+=b*b;
+        }
+    }
+    if(!isfinite(dot)||!isfinite(norm_a)||!isfinite(norm_b))return 0;
+    double cosine=norm_a>0.0&&norm_b>0.0?dot/(sqrt(norm_a)*sqrt(norm_b)):0.0;
+    if(cosine_out)*cosine_out=cosine;
+    const uint64_t total_tokens=task_a->tokens+task_b->tokens;
+    double weight_a=(double)task_a->tokens/(double)total_tokens;
+    if(method==2){
+        const double denominator=norm_a+norm_b-2.0*dot;
+        if(denominator>DBL_MIN)weight_a=(norm_b-dot)/denominator;
+        else weight_a=0.5;
+        const double minimum_task_weight=0.1,maximum_task_weight=0.9;
+        if(weight_a<minimum_task_weight)weight_a=minimum_task_weight;
+        if(weight_a>maximum_task_weight)weight_a=maximum_task_weight;
+    }
+    if(task_a_weight_out)*task_a_weight_out=weight_a;
+    double coefficient_a=method==1&&dot<0.0&&norm_b>0.0?dot/norm_b:0.0;
+    double coefficient_b=method==1&&dot<0.0&&norm_a>0.0?dot/norm_a:0.0;
+    ama10_gradients_reset(destination);
+    for(size_t k=0;k<AMA_PARAMS;k++)for(size_t i=0;i<sizes[k];i++){
+        double a=(double)task_a->values[k][i]/(double)task_a->tokens;
+        double b=(double)task_b->values[k][i]/(double)task_b->tokens;
+        double merged=method==2?(weight_a*a+(1.0-weight_a)*b)*(double)total_tokens:
+            (a-coefficient_a*b)*(double)task_a->tokens+
+            (b-coefficient_b*a)*(double)task_b->tokens;
+        if(!isfinite(merged)||fabs(merged)>FLT_MAX)return 0;
+        destination->values[k][i]=(float)merged;
+    }
+    destination->tokens=total_tokens;return 1;
+}
+
+int ama10_gradients_combine_tasks(AMA10Gradients *destination,const AMA10Gradients *task_a,
+                                  const AMA10Gradients *task_b,int method,double *cosine_out){
+    return ama10_gradients_combine_tasks_with_weights(destination,task_a,task_b,method,
+                                                       cosine_out,NULL);
 }
 
 float ama10_learning_rate(float base,uint64_t update,float decay){
@@ -620,264 +694,20 @@ muon_fail:
 static int train_sequence_internal(AMA10Model *m,AMA10Optimizer *opt,AMA10State *state,
                          const uint32_t *input,const float *input_features,
                          const unsigned char *feature_mask,const unsigned char *loss_mask,
+                         const uint32_t *class_starts,const uint32_t *class_counts,
                          const uint32_t *target,const float *soft_targets,size_t len,
                          unsigned depth,float halt_threshold,float lr,float wd,
                          AMA10Gradients *accumulator,float *feature_gradients,
                          float *mean_loss,float *mean_depth,void *opencl_handle){
-    void *opencl=opencl_handle;
-    const float rho=0.995f;
-    if(!m||!opt||!m->width||!m->input_width||!m->vocabulary||
-       (!input&&!input_features)||(!input&&feature_mask)||(input&&input_features&&!feature_mask)||
-       (feature_mask&&!input_features)||(!target&&!soft_targets)||!len||!depth||
-       (feature_gradients&&!input_features)||(input_features&&!feature_gradients)||
-       (halt_threshold>=0.0f&&(!isfinite(halt_threshold)||halt_threshold>2.0f))||
-       (!accumulator&&(!isfinite(lr)||lr<=0||!isfinite(wd)||wd<0))||
-       opt->parameter_count!=AMA_PARAMS||!opt->first_moment||!opt->second_moment||
-       (accumulator&&(!accumulator->values||accumulator->parameter_count!=AMA_PARAMS||
-        accumulator->width!=m->width||accumulator->input_width!=m->input_width||
-        accumulator->vocabulary!=m->vocabulary))||
-       (state&&(!state->fast||!state->slow||state->width!=m->width)))return 0;
-    size_t w=m->width,e=m->input_width,v=m->vocabulary;
-    if(soft_targets&&(len>SIZE_MAX/v||len*v>SIZE_MAX/sizeof(float)))return 0;
-    if(len>SIZE_MAX/e||len*e>SIZE_MAX/sizeof(float)||len>SIZE_MAX/w||len*w>SIZE_MAX/sizeof(float))return 0;
-    size_t supervised_tokens=0;
-    for(size_t t=0;t<len;t++)if(!loss_mask||loss_mask[t]){
-        if(soft_targets){double mass=0.0;for(size_t k=0;k<v;k++){
-            float q=soft_targets[t*v+k];if(!isfinite(q)||q<0.0f)return 0;mass+=q;
-        }if(fabs(mass-1.0)>1e-4)return 0;}
-        else if(target[t]>=v)return 0;
-        supervised_tokens++;
-    }
-    if(!supervised_tokens||(accumulator&&accumulator->tokens>UINT64_MAX-supervised_tokens))return 0;
-    if(feature_gradients)memset(feature_gradients,0,len*e*sizeof(float));
-    if(len>SIZE_MAX/depth)return 0;
-    if(len>UINT_MAX/depth||(state&&len>(size_t)(UINT_MAX-state->steps)/depth))return 0;
-    size_t cells=len*depth;
-    if(cells>SIZE_MAX/8 || cells*8>SIZE_MAX/w || cells*8*w>SIZE_MAX/sizeof(float) ||
-       len>SIZE_MAX/v || len*v>SIZE_MAX/sizeof(float))return 0;
-#ifdef AMA10_ENABLE_OPENCL
-    float *cache=opencl?NULL:(float*)calloc(cells*8*w,sizeof(float));
-#else
-    float *cache=(float*)calloc(cells*8*w,sizeof(float));
-#endif
-    float *logits=(float*)malloc(len*v*sizeof(float));
-    float *input_vectors=NULL,*input_projection=NULL;
-#ifdef AMA10_ENABLE_OPENCL
-    if(!opencl){input_vectors=(float*)malloc(len*e*sizeof(float));input_projection=(float*)malloc(len*w*sizeof(float));}
-#else
-    input_vectors=(float*)malloc(len*e*sizeof(float));input_projection=(float*)malloc(len*w*sizeof(float));
-#endif
-    float *head_hidden=NULL,*head_errors=NULL,*head_gradient=NULL,*head_hidden_gradient=NULL;
-#ifdef AMA10_ENABLE_OPENCL
-    if(opencl){
-        head_hidden=(float*)malloc(len*w*sizeof(float));
-        head_errors=(float*)calloc(len*v,sizeof(float));
-        head_gradient=(float*)malloc(v*w*sizeof(float));
-        head_hidden_gradient=(float*)malloc(len*w*sizeof(float));
-    }
-#endif
-    unsigned *used_depth=(unsigned*)malloc(len*sizeof(unsigned));
-    float *grads[AMA_PARAMS]={0};size_t pn[AMA_PARAMS];float *params[AMA_PARAMS];
-    parameter_views(m,params,pn);
-    for(size_t k=0;k<AMA_PARAMS;k++)grads[k]=(float*)calloc(pn[k],sizeof(float));
-    float *dh=(float*)calloc(w,sizeof(float)),*dm=(float*)calloc(w,sizeof(float));
-    float *dh0=(float*)calloc(w,sizeof(float)),*dm0=(float*)calloc(w,sizeof(float));
-    float *dpre=(float*)malloc(w*sizeof(float)),*dgate=(float*)malloc(w*sizeof(float));
-    if((!cache&&!opencl)||!logits||!used_depth||!dh||!dm||!dh0||!dm0||!dpre||!dgate||
-#ifdef AMA10_ENABLE_OPENCL
-       ((!opencl)&&(!input_vectors||!input_projection))||
-#else
-       (!input_vectors||!input_projection)||
-#endif
-#ifdef AMA10_ENABLE_OPENCL
-       (opencl&&(!head_hidden||!head_errors||!head_gradient||!head_hidden_gradient))||
-#endif
-       0)goto fail;
-    for(size_t k=0;k<AMA_PARAMS;k++)if(!grads[k])goto fail;
-#define C(t,d,f,i) cache[((((t)*(size_t)depth+(d))*8+(f))*w)+(i)]
-    float loss=0.0f;
-#ifdef AMA10_ENABLE_OPENCL
-    if(opencl){
-        for(size_t t=0;t<len;t++){if(input[t]>=v)goto fail;used_depth[t]=depth;}
-        AMA10OpenCL *backend=(AMA10OpenCL*)opencl;
-        const float *initial_fast=state?state->fast:dh;
-        const float *initial_slow=state?state->slow:dm;
-        if(!ama10_opencl_train_forward(backend,m,input,len,depth,initial_fast,initial_slow,
-                                       head_hidden,dm))goto fail;
-    }else
-#endif
-    for(size_t t=0;t<len;t++){
-        int use_feature=input_features&&(!feature_mask||feature_mask[t]);
-        if(!use_feature&&(!input||input[t]>=v))goto fail;
-        for(size_t j=0;j<e;j++){
-            float x=use_feature?input_features[t*e+j]:m->embed[j*v+input[t]];
-            if(use_feature&&!isfinite(x))goto fail;
-            input_vectors[t*e+j]=x;
-        }
-        for(size_t i=0;i<w;i++){
-            float projected=0.0f;
-            for(size_t j=0;j<e;j++)projected+=m->wx[i*e+j]*input_vectors[t*e+j];
-            input_projection[t*w+i]=projected;
-        }
-        used_depth[t]=depth;
-        for(unsigned d=0;d<depth;d++){
-            for(size_t i=0;i<w;i++){
-                unsigned previous_depth=t?used_depth[t-1]:0;
-                C(t,d,0,i)=d?C(t,d-1,6,i):(t?C(t-1,previous_depth-1,6,i):(state?state->fast[i]:0.0f));
-                C(t,d,1,i)=d?C(t,d-1,1,i):(t?C(t-1,previous_depth-1,7,i):(state?state->slow[i]:0.0f));
-            }
-            for(size_t i=0;i<w;i++){
-                float z=m->bias[i]+input_projection[t*w+i];
-                float q=m->gate_bias[i]+input_projection[t*w+i];
-                for(size_t j=0;j<w;j++){
-                    z+=m->wh[i*w+j]*C(t,d,0,j)+m->wm[i*w+j]*C(t,d,1,j);
-                    q+=m->wu[i*w+j]*C(t,d,0,j);
-                }
-                float proposal=tanhf(z),gate=sigmoid(q);
-                C(t,d,2,i)=z;C(t,d,3,i)=proposal;C(t,d,4,i)=q;C(t,d,5,i)=gate;
-                C(t,d,6,i)=(1.0f-gate)*C(t,d,0,i)+gate*proposal;
-                C(t,d,7,i)=C(t,d,1,i);
-            }
-            if(halt_threshold>=0.0f&&d+1>=2){
-                float activity=0.0f;
-                for(size_t i=0;i<w;i++)activity+=fabsf(C(t,d,6,i)-C(t,d,0,i));
-                float confidence=1.0f/(1.0f+activity/(float)w);
-                if(confidence>=halt_threshold){used_depth[t]=d+1;break;}
-            }
-        }
-        for(size_t i=0;i<w;i++)C(t,used_depth[t]-1,7,i)=rho*C(t,used_depth[t]-1,1,i)+(1.0f-rho)*C(t,used_depth[t]-1,6,i);
-        if(opencl)continue;
-        if(loss_mask&&!loss_mask[t])continue;
-        float mx=-INFINITY;
-        for(size_t k=0;k<v;k++){
-            float z=0;for(size_t j=0;j<w;j++)z+=m->head[k*w+j]*C(t,used_depth[t]-1,6,j);
-            logits[t*v+k]=z;if(z>mx)mx=z;
-        }
-        double sum=0;for(size_t k=0;k<v;k++)sum+=exp((double)logits[t*v+k]-(double)mx);
-        if(!(sum>0)||!isfinite(sum))goto fail;
-        double log_sum=log(sum);
-        if(soft_targets){for(size_t k=0;k<v;k++)if(soft_targets[t*v+k]>0.0f)
-            loss-=soft_targets[t*v+k]*(float)((double)logits[t*v+k]-(double)mx-log_sum);}
-        else loss+=-(float)((double)logits[t*v+target[t]]-(double)mx-log_sum);
-        for(size_t k=0;k<v;k++)logits[t*v+k]=(float)(exp((double)logits[t*v+k]-(double)mx)/sum);
-    }
-#ifdef AMA10_ENABLE_OPENCL
-    if(opencl){
-        if(!ama10_opencl_head_forward(opencl,m->head,head_hidden,len,logits))goto fail;
-        for(size_t t=0;t<len;t++)if(!loss_mask||loss_mask[t]){
-            float mx=logits[t*v];for(size_t k=1;k<v;k++)if(logits[t*v+k]>mx)mx=logits[t*v+k];
-            double sum=0;for(size_t k=0;k<v;k++)sum+=exp((double)logits[t*v+k]-(double)mx);
-            if(!(sum>0)||!isfinite(sum))goto fail;
-            if(soft_targets){for(size_t k=0;k<v;k++)if(soft_targets[t*v+k]>0.0f)
-                loss-=soft_targets[t*v+k]*(float)((double)logits[t*v+k]-(double)mx-log(sum));}
-            else loss+=-(float)((double)logits[t*v+target[t]]-(double)mx-log(sum));
-            for(size_t k=0;k<v;k++)head_errors[t*v+k]=(float)(exp((double)logits[t*v+k]-(double)mx)/sum)-
-                (soft_targets?soft_targets[t*v+k]:(k==target[t]?1.0f:0.0f));
-        }
-        if(!ama10_opencl_head_backward(opencl,m->head,head_hidden,head_errors,len,head_gradient,head_hidden_gradient))goto fail;
-        memcpy(grads[7],head_gradient,v*w*sizeof(float));
-    }
-#endif
-    /* Reverse time only after the complete unrolled trajectory has been recorded. */
-#ifdef AMA10_ENABLE_OPENCL
-    if(opencl){
-        AMA10OpenCL *backend=(AMA10OpenCL*)opencl;
-        if(!ama10_opencl_bptt_begin(backend,m,cache,input,len,depth,head_hidden_gradient))goto fail;
-        for(size_t revt=len;revt>0;revt--){size_t t=revt-1;
-            for(unsigned rev=used_depth[t];rev>0;rev--){unsigned d=rev-1;
-                if(!ama10_opencl_bptt_step(backend,t,d,d+1==used_depth[t]))goto fail;
-            }
-        }
-        if(!ama10_opencl_bptt_finish(backend,&(AMA10Gradients){.values=grads,.parameter_count=AMA_PARAMS,
-            .width=w,.input_width=e,.vocabulary=v}))goto fail;
-    }else
-#endif
-    for(size_t revt=len;revt>0;revt--){size_t t=revt-1;
-        if(!loss_mask||loss_mask[t]){
-            for(size_t k=0;k<v;k++){
-                float dz=logits[t*v+k]-(soft_targets?soft_targets[t*v+k]:(k==target[t]?1.0f:0.0f));
-                for(size_t j=0;j<w;j++){
-                    grads[7][k*w+j]+=dz*C(t,used_depth[t]-1,6,j);
-                    dh[j]+=m->head[k*w+j]*dz;
-                }
-            }
-        }
-        for(unsigned rev=used_depth[t];rev>0;rev--){unsigned d=rev-1;
-            memset(dh0,0,w*sizeof(float));memset(dm0,0,w*sizeof(float));
-            for(size_t i=0;i<w;i++){
-                float h=C(t,d,0,i),proposal=C(t,d,3,i),gate=C(t,d,5,i);
-                int final_depth=(d+1==used_depth[t]);
-                float dnew=dh[i]+(final_depth?(1.0f-rho)*dm[i]:0.0f);
-                dm0[i]+=final_depth?rho*dm[i]:dm[i];
-                float dp=dnew*gate;
-                float dg=dnew*(proposal-h);
-                dpre[i]=dp*(1.0f-proposal*proposal);
-                dgate[i]=dg*gate*(1.0f-gate);
-                dh0[i]+=dnew*(1.0f-gate);
-                grads[4][i]+=dpre[i];grads[5][i]+=dgate[i];
-            }
-            for(size_t i=0;i<w;i++)for(size_t j=0;j<w;j++){
-                grads[1][i*w+j]+=dpre[i]*C(t,d,0,j);
-                grads[2][i*w+j]+=dpre[i]*C(t,d,1,j);
-                grads[3][i*w+j]+=dgate[i]*C(t,d,0,j);
-                dh0[j]+=m->wh[i*w+j]*dpre[i]+m->wu[i*w+j]*dgate[i];
-                dm0[j]+=m->wm[i*w+j]*dpre[i];
-            }
-            for(size_t i=0;i<w;i++)for(size_t j=0;j<e;j++){
-                size_t ix=i*e+j;float input_grad=dpre[i]+dgate[i];
-                int use_feature=input_features&&(!feature_mask||feature_mask[t]);
-                float x=input_vectors[t*e+j];
-                grads[0][ix]+=input_grad*x;
-                if(use_feature)feature_gradients[t*e+j]+=m->wx[ix]*input_grad;
-                else grads[6][j*v+input[t]]+=m->wx[ix]*input_grad;
-            }
-            memcpy(dh,dh0,w*sizeof(float));memcpy(dm,dm0,w*sizeof(float));
-        }
-    }
-    if(feature_gradients)
-        for(size_t i=0;i<len*e;i++)feature_gradients[i]/=(float)supervised_tokens;
-    loss/=(float)supervised_tokens;
-    {
-        unsigned total_steps=0;for(size_t t=0;t<len;t++)total_steps+=used_depth[t];
-        if(mean_depth)*mean_depth=(float)total_steps/(float)len;
-        if(state){
-#ifdef AMA10_ENABLE_OPENCL
-        if(opencl){memcpy(state->fast,head_hidden+(len-1)*w,w*sizeof(float));memcpy(state->slow,dm,w*sizeof(float));}
-        else{
-#endif
-        memcpy(state->fast,&cache[(((len-1)*depth+(used_depth[len-1]-1))*8+6)*w],w*sizeof(float));
-        memcpy(state->slow,&cache[(((len-1)*depth+(used_depth[len-1]-1))*8+7)*w],w*sizeof(float));
-#ifdef AMA10_ENABLE_OPENCL
-        }
-#endif
-        state->steps+=total_steps;
-        }
-    }
-    if(accumulator){
-        for(size_t k=0;k<AMA_PARAMS;k++)for(size_t i=0;i<pn[k];i++)
-            accumulator->values[k][i]+=grads[k][i];
-        accumulator->tokens+=(uint64_t)supervised_tokens;
-    }else{
-        AMA10Gradients update={0};update.values=grads;update.parameter_count=AMA_PARAMS;
-        update.width=m->width;update.input_width=m->input_width;update.vocabulary=m->vocabulary;
-        update.tokens=(uint64_t)supervised_tokens;
-        if(!ama10_optimizer_apply(m,opt,&update,lr,wd))goto fail;
-    }
-    if(mean_loss)*mean_loss=loss;
-    free(cache);free(logits);free(input_vectors);free(input_projection);free(used_depth);free(dh);free(dm);free(dh0);free(dm0);free(dpre);free(dgate);free(head_hidden);free(head_errors);free(head_gradient);free(head_hidden_gradient);
-    for(size_t k=0;k<AMA_PARAMS;k++)free(grads[k]);
-    return 1;
-fail:
-    free(cache);free(logits);free(input_vectors);free(input_projection);free(used_depth);free(dh);free(dm);free(dh0);free(dm0);free(dpre);free(dgate);free(head_hidden);free(head_errors);free(head_gradient);free(head_hidden_gradient);
-    for(size_t k=0;k<AMA_PARAMS;k++)free(grads[k]);
-    return 0;
-#undef C
+    return ama10_affine_train_sequence_internal(m,opt,state,input,input_features,feature_mask,
+        loss_mask,class_starts,class_counts,target,soft_targets,len,depth,halt_threshold,lr,wd,
+        accumulator,feature_gradients,mean_loss,mean_depth,opencl_handle);
 }
 
 int ama10_train_sequence(AMA10Model *m,AMA10Optimizer *opt,AMA10State *state,const uint32_t *input,
                          const uint32_t *target,size_t len,unsigned depth,
                          float lr,float wd,float *mean_loss){
-    return train_sequence_internal(m,opt,state,input,NULL,NULL,NULL,target,NULL,len,depth,-1.0f,lr,wd,NULL,NULL,mean_loss,NULL,NULL);
+    return train_sequence_internal(m,opt,state,input,NULL,NULL,NULL,NULL,NULL,target,NULL,len,depth,-1.0f,lr,wd,NULL,NULL,mean_loss,NULL,NULL);
 }
 
 int ama10_train_sequence_adaptive(AMA10Model *m,AMA10Optimizer *opt,AMA10State *state,
@@ -885,14 +715,14 @@ int ama10_train_sequence_adaptive(AMA10Model *m,AMA10Optimizer *opt,AMA10State *
                                   unsigned max_depth,float halt_threshold,float lr,float wd,
                                   float *mean_loss,float *mean_depth){
     if(!isfinite(halt_threshold)||halt_threshold<0.0f)return 0;
-    return train_sequence_internal(m,opt,state,input,NULL,NULL,NULL,target,NULL,len,max_depth,halt_threshold,
+    return train_sequence_internal(m,opt,state,input,NULL,NULL,NULL,NULL,NULL,target,NULL,len,max_depth,halt_threshold,
                                    lr,wd,NULL,NULL,mean_loss,mean_depth,NULL);
 }
 
 int ama10_train_sequence_accumulate(AMA10Model *m,AMA10Optimizer *opt,AMA10State *state,
                                     const uint32_t *input,const uint32_t *target,size_t len,
                                     unsigned depth,AMA10Gradients *gradients,float *mean_loss){
-    return train_sequence_internal(m,opt,state,input,NULL,NULL,NULL,target,NULL,len,depth,-1.0f,0.0f,0.0f,
+    return train_sequence_internal(m,opt,state,input,NULL,NULL,NULL,NULL,NULL,target,NULL,len,depth,-1.0f,0.0f,0.0f,
                                    gradients,NULL,mean_loss,NULL,NULL);
 }
 
@@ -901,7 +731,7 @@ int ama10_train_feature_sequence(AMA10Model *m,AMA10Optimizer *opt,AMA10State *s
                                  size_t len,unsigned depth,float lr,float wd,
                                  float *feature_gradients,float *mean_loss){
     if(!feature_gradients)return 0;
-    return train_sequence_internal(m,opt,state,NULL,input_features,NULL,NULL,target,NULL,len,depth,-1.0f,
+    return train_sequence_internal(m,opt,state,NULL,input_features,NULL,NULL,NULL,NULL,target,NULL,len,depth,-1.0f,
                                    lr,wd,NULL,feature_gradients,mean_loss,NULL,NULL);
 }
 
@@ -911,7 +741,7 @@ int ama10_train_multimodal_sequence(AMA10Model *m,AMA10Optimizer *opt,AMA10State
                                     const uint32_t *targets,size_t length,unsigned depth,float lr,
                                     float wd,float *feature_gradients,float *mean_loss){
     return train_sequence_internal(m,opt,state,token_inputs,feature_inputs,feature_mask,loss_mask,
-                                   targets,NULL,length,depth,-1.0f,lr,wd,NULL,feature_gradients,
+                                   NULL,NULL,targets,NULL,length,depth,-1.0f,lr,wd,NULL,feature_gradients,
                                    mean_loss,NULL,NULL);
 }
 int ama10_train_multimodal_accumulate(AMA10Model *m,AMA10Optimizer *opt,AMA10State *state,
@@ -922,8 +752,22 @@ int ama10_train_multimodal_accumulate(AMA10Model *m,AMA10Optimizer *opt,AMA10Sta
                                     float *mean_loss){
     if(!gradients||!feature_gradients)return 0;
     return train_sequence_internal(m,opt,state,token_inputs,feature_inputs,feature_mask,loss_mask,
-                                   targets,NULL,length,depth,-1.0f,0.0f,0.0f,gradients,
+                                   NULL,NULL,targets,NULL,length,depth,-1.0f,0.0f,0.0f,gradients,
                                    feature_gradients,mean_loss,NULL,NULL);
+}
+int ama10_train_multimodal_accumulate_ranges(AMA10Model *m,AMA10Optimizer *opt,
+                                    AMA10State *state,const uint32_t *token_inputs,
+                                    const float *feature_inputs,
+                                    const unsigned char *feature_mask,
+                                    const unsigned char *loss_mask,
+                                    const uint32_t *targets,const uint32_t *class_starts,
+                                    const uint32_t *class_counts,size_t length,unsigned depth,
+                                    AMA10Gradients *gradients,float *feature_gradients,
+                                    float *mean_loss){
+    if(!gradients||(!feature_gradients&&feature_inputs))return 0;
+    return train_sequence_internal(m,opt,state,token_inputs,feature_inputs,feature_mask,loss_mask,
+                                   class_starts,class_counts,targets,NULL,length,depth,-1.0f,
+                                   0.0f,0.0f,gradients,feature_gradients,mean_loss,NULL,NULL);
 }
 int ama10_train_soft_multimodal_sequence(AMA10Model *m,AMA10Optimizer *opt,AMA10State *state,
                                     const uint32_t *token_inputs,const float *feature_inputs,
@@ -932,7 +776,7 @@ int ama10_train_soft_multimodal_sequence(AMA10Model *m,AMA10Optimizer *opt,AMA10
                                     float lr,float wd,float *feature_gradients,float *mean_loss){
     if(!soft_targets)return 0;
     return train_sequence_internal(m,opt,state,token_inputs,feature_inputs,feature_mask,loss_mask,
-        NULL,soft_targets,length,depth,-1.0f,lr,wd,NULL,feature_gradients,mean_loss,NULL,NULL);
+        NULL,NULL,NULL,soft_targets,length,depth,-1.0f,lr,wd,NULL,feature_gradients,mean_loss,NULL,NULL);
 }
 
 int ama10_train_sequence_accumulate_opencl(AMA10Model *m,AMA10Optimizer *opt,AMA10State *state,
@@ -941,11 +785,30 @@ int ama10_train_sequence_accumulate_opencl(AMA10Model *m,AMA10Optimizer *opt,AMA
                                     struct AMA10OpenCL *backend,float *mean_loss){
 #ifdef AMA10_ENABLE_OPENCL
     if(!backend)return 0;
-    return train_sequence_internal(m,opt,state,input,NULL,NULL,NULL,target,NULL,len,depth,-1.0f,
+    return train_sequence_internal(m,opt,state,input,NULL,NULL,NULL,NULL,NULL,target,NULL,len,depth,-1.0f,
                                    0.0f,0.0f,gradients,NULL,mean_loss,NULL,backend);
 #else
     (void)m;(void)opt;(void)state;(void)input;(void)target;(void)len;(void)depth;
     (void)gradients;(void)backend;(void)mean_loss;return 0;
+#endif
+}
+
+int ama10_train_multimodal_accumulate_ranges_opencl(AMA10Model *m,AMA10Optimizer *opt,
+                                    AMA10State *state,const uint32_t *token_inputs,
+                                    const float *feature_inputs,const unsigned char *feature_mask,
+                                    const unsigned char *loss_mask,const uint32_t *targets,
+                                    const uint32_t *class_starts,const uint32_t *class_counts,
+                                    size_t length,unsigned depth,AMA10Gradients *gradients,
+                                    float *feature_gradients,struct AMA10OpenCL *backend,float *mean_loss){
+#ifdef AMA10_ENABLE_OPENCL
+    if(!backend||!gradients||(!feature_gradients&&feature_inputs))return 0;
+    return train_sequence_internal(m,opt,state,token_inputs,feature_inputs,feature_mask,loss_mask,
+        class_starts,class_counts,targets,NULL,length,depth,-1.0f,0.0f,0.0f,gradients,
+        feature_gradients,mean_loss,NULL,backend);
+#else
+    (void)m;(void)opt;(void)state;(void)token_inputs;(void)feature_inputs;(void)feature_mask;
+    (void)loss_mask;(void)targets;(void)class_starts;(void)class_counts;(void)length;
+    (void)depth;(void)gradients;(void)feature_gradients;(void)backend;(void)mean_loss;return 0;
 #endif
 }
 

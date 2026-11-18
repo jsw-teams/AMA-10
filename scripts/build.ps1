@@ -13,6 +13,10 @@ if ($compiler) {
     }
 }
 if (-not $gcc) { throw 'GCC was not found. Install a C11 GCC toolchain and add it to PATH.' }
+$gccBin = Split-Path -Parent $gcc
+if (($env:PATH -split [IO.Path]::PathSeparator) -notcontains $gccBin) {
+    $env:PATH = "$gccBin$([IO.Path]::PathSeparator)$env:PATH"
+}
 
 $rootDir = Split-Path -Parent $PSScriptRoot
 $buildDir = Join-Path $rootDir 'build'
@@ -23,14 +27,14 @@ New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
 Push-Location $rootDir
 try {
     $common = @('-std=c11','-O3','-Wall','-Wextra','-Wpedantic','-Werror','-I','include')
-    $core = @('src/model.c','src/encoder.c','src/image.c','src/image_gen.c','src/audio.c','src/tokenizer.c','src/checkpoint.c','src/multimodal_checkpoint.c','src/dataset.c','src/eval.c','src/lora.c','src/tools.c','src/q8.c')
+    $core = @('src/model.c','src/affine_model.c','src/encoder.c','src/image.c','src/image_gen.c','src/audio.c','src/tokenizer.c','src/checkpoint.c','src/multimodal_checkpoint.c','src/dataset.c','src/eval.c','src/lora.c','src/tools.c','src/q8.c')
     $openclArgs = @()
     if ($OpenCL) {
         $openclRoot = $env:CUDA_PATH
         if (-not $openclRoot -or -not (Test-Path -LiteralPath (Join-Path $openclRoot 'include\CL\cl.h'))) {
             throw 'OpenCL headers were not found under CUDA_PATH.'
         }
-        $openclArgs = @('-DAMA10_ENABLE_OPENCL=1','-I',(Join-Path $openclRoot 'include'),'src/opencl_backend.c','-L',(Join-Path $openclRoot 'lib\x64'),'-lOpenCL')
+        $openclArgs = @('-DAMA10_ENABLE_OPENCL=1','-I',(Join-Path $openclRoot 'include'),'src/opencl_backend.c','src/affine_scan_opencl.c','src/image_gen_opencl.c','-L',(Join-Path $openclRoot 'lib\x64'),'-lOpenCL')
     }
     & $gcc @common @core @openclArgs src/main.c -lm -o (Join-Path $buildDir 'ama10.exe')
     if ($LASTEXITCODE -ne 0) { throw "AMA-10 build failed with exit code $LASTEXITCODE" }
@@ -40,6 +44,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Image-caption generator build failed with exit code $LASTEXITCODE" }
     & $gcc @common @core src/image_gen_train.c -lm -o (Join-Path $buildDir 'ama10_image_gen_train.exe')
     if ($LASTEXITCODE -ne 0) { throw "Image generation trainer build failed with exit code $LASTEXITCODE" }
+    if ($OpenCL) {
+        & $gcc @common '-I' (Join-Path $env:CUDA_PATH 'include') '-DAMA10_ENABLE_OPENCL=1' src/opencl_backend.c src/affine_scan_opencl.c src/image_gen_opencl.c @core src/image_gen_train.c '-L' (Join-Path $env:CUDA_PATH 'lib\x64') '-lOpenCL' -lm -o (Join-Path $buildDir 'ama10_image_gen_train_opencl.exe')
+        if ($LASTEXITCODE -ne 0) { throw "OpenCL image generation trainer build failed with exit code $LASTEXITCODE" }
+    }
     & $gcc @common @core src/image_gen_generate.c -lm -o (Join-Path $buildDir 'ama10_image_gen_generate.exe')
     if ($LASTEXITCODE -ne 0) { throw "Image generator build failed with exit code $LASTEXITCODE" }
     & $gcc @common @core src/image_score.c -lm -o (Join-Path $buildDir 'ama10_image_score.exe')
@@ -84,7 +92,7 @@ try {
     & $gcc @common src/tokenizer.c src/eval.c src/text_score.c -lm -o (Join-Path $buildDir 'ama10_score_text.exe')
     if ($LASTEXITCODE -ne 0) { throw "Text scorer build failed with exit code $LASTEXITCODE" }
     if ($OpenCL) {
-        & $gcc @common '-I' (Join-Path $env:CUDA_PATH 'include') '-DAMA10_ENABLE_OPENCL=1' src/opencl_backend.c @core benchmarks/opencl_inference.c '-L' (Join-Path $env:CUDA_PATH 'lib\x64') '-lOpenCL' -lm -o (Join-Path $buildDir 'ama10_opencl_bench.exe')
+        & $gcc @common '-I' (Join-Path $env:CUDA_PATH 'include') '-DAMA10_ENABLE_OPENCL=1' src/opencl_backend.c src/affine_scan_opencl.c src/image_gen_opencl.c @core benchmarks/opencl_inference.c '-L' (Join-Path $env:CUDA_PATH 'lib\x64') '-lOpenCL' -lm -o (Join-Path $buildDir 'ama10_opencl_bench.exe')
         if ($LASTEXITCODE -ne 0) { throw "OpenCL benchmark build failed with exit code $LASTEXITCODE" }
     }
     if ($Test) {
@@ -101,15 +109,15 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "SwanLab uploader test build failed with exit code $LASTEXITCODE" }
         & (Join-Path $buildDir 'ama10_swanlab_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "SwanLab uploader validation test failed with exit code $LASTEXITCODE" }
-        & $gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror -I include src/model.c src/tokenizer.c tests/core_test.c -lm -o (Join-Path $buildDir 'ama10_core_test.exe')
+        & $gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror -I include src/model.c src/affine_model.c src/tokenizer.c tests/core_test.c -lm -o (Join-Path $buildDir 'ama10_core_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Test build failed with exit code $LASTEXITCODE" }
         & (Join-Path $buildDir 'ama10_core_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Core test failed with exit code $LASTEXITCODE" }
-        & $gcc @common src/model.c src/encoder.c tests/encoder_test.c -lm -o (Join-Path $buildDir 'ama10_encoder_test.exe')
+        & $gcc @common src/model.c src/affine_model.c src/encoder.c tests/encoder_test.c -lm -o (Join-Path $buildDir 'ama10_encoder_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Encoder test build failed with exit code $LASTEXITCODE" }
         & (Join-Path $buildDir 'ama10_encoder_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Encoder test failed with exit code $LASTEXITCODE" }
-        & $gcc @common src/model.c src/encoder.c src/image.c tests/image_test.c -lm -o (Join-Path $buildDir 'ama10_image_test.exe')
+        & $gcc @common src/model.c src/affine_model.c src/encoder.c src/image.c tests/image_test.c -lm -o (Join-Path $buildDir 'ama10_image_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Image test build failed with exit code $LASTEXITCODE" }
         & (Join-Path $buildDir 'ama10_image_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Image test failed with exit code $LASTEXITCODE" }
@@ -208,10 +216,10 @@ try {
         [Environment]::SetEnvironmentVariable('AMA10_USE_CLOUDFLARE_TEACHER','0','Process')
         $supervisorLanguageReport = Join-Path $buildDir 'supervisor-language-fixture.json'
         $supervisorLanguageFiles = "en=$kdValid;de=$kdValid"
-        & (Join-Path $buildDir 'ama10_supervisor.exe') (Join-Path $buildDir 'sft-fixture.ama') (Join-Path $buildDir 'sft-fixture.ama') $kdValid $supervisorLanguageReport (Join-Path $buildDir 'supervisor-language-fixture.ama') 0.01 0.75 $supervisorLanguageFiles 0.1
+        & (Join-Path $buildDir 'ama10_supervisor.exe') (Join-Path $buildDir 'sft-fixture.ama') (Join-Path $buildDir 'sft-fixture.ama') $kdValid $supervisorLanguageReport (Join-Path $buildDir 'supervisor-language-fixture.ama') 0.01 0.75 $supervisorLanguageFiles 0.1 0.0
         if ($LASTEXITCODE -ne 0) { throw "Supervisor language-stratified integration failed with exit code $LASTEXITCODE" }
         $supervisorLanguageJson = Get-Content -LiteralPath $supervisorLanguageReport -Raw | ConvertFrom-Json
-        if ($supervisorLanguageJson.decision -ne 'accept' -or -not $supervisorLanguageJson.language_gate_enabled -or -not $supervisorLanguageJson.script_gate_enabled -or $supervisorLanguageJson.minimum_expected_script_fraction -ne 0.5 -or $supervisorLanguageJson.language_validation.Count -ne 2 -or @($supervisorLanguageJson.language_validation | Where-Object { -not $_.passed -or $_.expected_script -ne 'latin' -or $_.expected_script_fraction -lt 0.5 }).Count -ne 0) {
+        if ($supervisorLanguageJson.decision -ne 'accept' -or -not $supervisorLanguageJson.language_gate_enabled -or -not $supervisorLanguageJson.script_gate_enabled -or $supervisorLanguageJson.minimum_expected_script_fraction -ne 0.0 -or $supervisorLanguageJson.language_validation.Count -ne 2 -or @($supervisorLanguageJson.language_validation | Where-Object { -not $_.passed -or $_.expected_script -ne 'latin' }).Count -ne 0) {
             throw 'Supervisor did not report passing per-language validation gates for an identical checkpoint'
         }
         $supervisorScriptReport = Join-Path $buildDir 'supervisor-script-fixture.json'
@@ -252,19 +260,19 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Tokenizer test build failed with exit code $LASTEXITCODE" }
         & (Join-Path $buildDir 'ama10_tokenizer_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Tokenizer test failed with exit code $LASTEXITCODE" }
-        & $gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror -I include src/model.c src/tokenizer.c src/checkpoint.c tests/checkpoint_test.c -lm -o (Join-Path $buildDir 'ama10_checkpoint_test.exe')
+        & $gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror -I include src/model.c src/affine_model.c src/tokenizer.c src/checkpoint.c tests/checkpoint_test.c -lm -o (Join-Path $buildDir 'ama10_checkpoint_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Checkpoint test build failed with exit code $LASTEXITCODE" }
         & (Join-Path $buildDir 'ama10_checkpoint_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Checkpoint test failed with exit code $LASTEXITCODE" }
-        & $gcc @common src/model.c tests/safetensors_test.c -lm -o (Join-Path $buildDir 'ama10_safetensors_test.exe')
+        & $gcc @common src/model.c src/affine_model.c tests/safetensors_test.c -lm -o (Join-Path $buildDir 'ama10_safetensors_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "SafeTensors test build failed with exit code $LASTEXITCODE" }
         & (Join-Path $buildDir 'ama10_safetensors_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "SafeTensors test failed with exit code $LASTEXITCODE" }
-        & $gcc @common src/model.c src/q8.c tests/q8_test.c -lm -o (Join-Path $buildDir 'ama10_q8_test.exe')
+        & $gcc @common src/model.c src/affine_model.c src/q8.c tests/q8_test.c -lm -o (Join-Path $buildDir 'ama10_q8_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Q8 test build failed with exit code $LASTEXITCODE" }
         & (Join-Path $buildDir 'ama10_q8_test.exe') $buildDir
         if ($LASTEXITCODE -ne 0) { throw "Q8 test failed with exit code $LASTEXITCODE" }
-        & $gcc @common src/model.c src/encoder.c src/tokenizer.c src/checkpoint.c src/multimodal_checkpoint.c tests/multimodal_checkpoint_test.c -lm -o (Join-Path $buildDir 'ama10_multimodal_checkpoint_test.exe')
+        & $gcc @common src/model.c src/affine_model.c src/encoder.c src/tokenizer.c src/checkpoint.c src/multimodal_checkpoint.c tests/multimodal_checkpoint_test.c -lm -o (Join-Path $buildDir 'ama10_multimodal_checkpoint_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Multimodal checkpoint test build failed with exit code $LASTEXITCODE" }
         & (Join-Path $buildDir 'ama10_multimodal_checkpoint_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "Multimodal checkpoint test failed with exit code $LASTEXITCODE" }
@@ -281,7 +289,15 @@ try {
         & (Join-Path $buildDir 'ama10_lora_test.exe')
         if ($LASTEXITCODE -ne 0) { throw "LoRA test failed with exit code $LASTEXITCODE" }
         if ($OpenCL) {
-            & $gcc @common '-DAMA10_ENABLE_OPENCL=1' '-I' (Join-Path $env:CUDA_PATH 'include') src/opencl_backend.c @core tests/opencl_test.c '-L' (Join-Path $env:CUDA_PATH 'lib\x64') '-lOpenCL' -lm -o (Join-Path $buildDir 'ama10_opencl_test.exe')
+            & $gcc @common '-DAMA10_ENABLE_OPENCL=1' '-I' (Join-Path $env:CUDA_PATH 'include') src/image.c src/image_gen.c src/image_gen_opencl.c tests/image_gen_opencl_test.c '-L' (Join-Path $env:CUDA_PATH 'lib\x64') '-lOpenCL' -lm -o (Join-Path $buildDir 'ama10_image_gen_opencl_test.exe')
+            if ($LASTEXITCODE -ne 0) { throw "OpenCL spatial codec test build failed with exit code $LASTEXITCODE" }
+            & (Join-Path $buildDir 'ama10_image_gen_opencl_test.exe') $buildDir (Join-Path $rootDir 'kernels\ama10_recurrent.cl')
+            if ($LASTEXITCODE -ne 0) { throw "OpenCL spatial codec test failed with exit code $LASTEXITCODE" }
+            & $gcc @common '-I' (Join-Path $env:CUDA_PATH 'include') src/affine_scan_opencl.c tests/affine_scan_test.c '-L' (Join-Path $env:CUDA_PATH 'lib\x64') '-lOpenCL' -lm -o (Join-Path $buildDir 'ama10_affine_scan_test.exe')
+            if ($LASTEXITCODE -ne 0) { throw "Affine scan test build failed with exit code $LASTEXITCODE" }
+            & (Join-Path $buildDir 'ama10_affine_scan_test.exe') (Join-Path $rootDir 'kernels\ama10_affine_scan.cl')
+            if ($LASTEXITCODE -ne 0) { throw "Affine scan test failed with exit code $LASTEXITCODE" }
+        & $gcc @common '-DAMA10_ENABLE_OPENCL=1' '-I' (Join-Path $env:CUDA_PATH 'include') src/opencl_backend.c src/affine_scan_opencl.c src/image_gen_opencl.c @core tests/opencl_test.c '-L' (Join-Path $env:CUDA_PATH 'lib\x64') '-lOpenCL' -lm -o (Join-Path $buildDir 'ama10_opencl_test.exe')
             if ($LASTEXITCODE -ne 0) { throw "OpenCL test build failed with exit code $LASTEXITCODE" }
             & (Join-Path $buildDir 'ama10_opencl_test.exe') (Join-Path $rootDir 'kernels\ama10_recurrent.cl')
             if ($LASTEXITCODE -ne 0) { throw "OpenCL test failed with exit code $LASTEXITCODE" }

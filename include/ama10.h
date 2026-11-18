@@ -39,6 +39,7 @@ typedef struct {
     float *input_projection; /* reusable inference workspace; not checkpoint state */
     float *scratch_next;
     float *scratch_proposal;
+    float *reasoning; /* last shared reasoning state; reusable inference workspace */
 } AMA10State;
 
 typedef struct {
@@ -78,6 +79,18 @@ void ama10_optimizer_free(AMA10Optimizer *opt);
 int ama10_gradients_init(AMA10Gradients *gradients,const AMA10Model *model);
 void ama10_gradients_reset(AMA10Gradients *gradients);
 void ama10_gradients_free(AMA10Gradients *gradients);
+/* Combine two separately accumulated task gradients. method: 0 token-weighted
+   direct sum, 1 PCGrad conflict projection, 2 constrained minimum-norm convex
+   combination of token-mean gradients. cosine_out reports the pre-projection
+   task-gradient cosine. */
+int ama10_gradients_combine_tasks(AMA10Gradients *destination,
+                                  const AMA10Gradients *task_a,
+                                  const AMA10Gradients *task_b,int method,
+                                  double *cosine_out);
+int ama10_gradients_combine_tasks_with_weights(AMA10Gradients *destination,
+                                  const AMA10Gradients *task_a,
+                                  const AMA10Gradients *task_b,int method,
+                                  double *cosine_out,double *task_a_weight_out);
 float ama10_learning_rate(float base_rate,uint64_t optimizer_update,
                           float inverse_sqrt_decay);
 /* Applies the token-mean accumulated gradient, clips its global norm, updates
@@ -137,6 +150,27 @@ int ama10_train_multimodal_accumulate(AMA10Model *m,AMA10Optimizer *opt,AMA10Sta
                                     const uint32_t *targets,size_t length,unsigned depth,
                                     AMA10Gradients *gradients,float *feature_gradients,
                                     float *mean_loss);
+/* Accumulate causal loss with per-step output-class ranges. If both range arrays
+   are NULL, each step uses the full vocabulary; supervised targets must fall
+   inside their selected range. */
+int ama10_train_multimodal_accumulate_ranges(AMA10Model *m,AMA10Optimizer *opt,
+                                    AMA10State *state,const uint32_t *token_inputs,
+                                    const float *feature_inputs,
+                                    const unsigned char *feature_mask,
+                                    const unsigned char *loss_mask,
+                                    const uint32_t *targets,const uint32_t *class_starts,
+                                    const uint32_t *class_counts,size_t length,unsigned depth,
+                                    AMA10Gradients *gradients,float *feature_gradients,
+                                    float *mean_loss);
+int ama10_train_multimodal_accumulate_ranges_opencl(AMA10Model *m,AMA10Optimizer *opt,
+                                    AMA10State *state,const uint32_t *token_inputs,
+                                    const float *feature_inputs,
+                                    const unsigned char *feature_mask,
+                                    const unsigned char *loss_mask,
+                                    const uint32_t *targets,const uint32_t *class_starts,
+                                    const uint32_t *class_counts,size_t length,unsigned depth,
+                                    AMA10Gradients *gradients,float *feature_gradients,
+                                    struct AMA10OpenCL *backend,float *mean_loss);
 /* Train against a normalized soft target distribution at each supervised step.
    This supports sequence criteria (for example CTC forward-backward) that produce
    posterior targets. soft_targets is length x vocabulary, row-major. */

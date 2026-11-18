@@ -84,15 +84,30 @@ static int step( const AMA10Q8Model*m,AMA10State*s,const float*x,float*logits,un
     if(!m||!s||!x||!logits||!s->fast||!s->slow||s->width!=m->width||!max_depth||!isfinite(threshold)||threshold<0||threshold>2)return 0;
     size_t w=m->width,e=m->input_width;
     for(size_t j=0;j<e;j++)if(!isfinite(x[j]))return 0;
-    float*next=(float*)malloc(w*sizeof(float)),*proposal=(float*)malloc(w*sizeof(float));if(!next||!proposal){free(next);free(proposal);return 0;}
-    for(unsigned d=0;d<max_depth;d++){float activity=0;for(size_t i=0;i<w;i++){float drive=m->bias[i],input=0,wxsum=0;
-        for(size_t j=0;j<e;j++)wxsum+=(float)m->wx[i*e+j]*x[j];
-        drive+=m->wx_scale[i]*wxsum;input=m->wx_scale[i]*wxsum;
-        float whsum=0,wmsum=0,wusum=0;for(size_t j=0;j<w;j++){whsum+=(float)m->wh[i*w+j]*s->fast[j];wmsum+=(float)m->wm[i*w+j]*s->slow[j];wusum+=(float)m->wu[i*w+j]*s->fast[j];}
-        drive+=m->wh_scale[i]*whsum+m->wm_scale[i]*wmsum;float gate=m->gate_bias[i]+input+m->wu_scale[i]*wusum;float g=gate>=0?1.0f/(1.0f+expf(-gate)):expf(gate)/(1.0f+expf(gate));proposal[i]=tanhf(drive);next[i]=(1-g)*s->fast[i]+g*proposal[i];activity+=fabsf(next[i]-s->fast[i]);}
-        memcpy(s->fast,next,w*sizeof(float));for(size_t i=0;i<w;i++)s->slow[i]=0.995f*s->slow[i]+0.005f*s->fast[i];s->steps++;float confidence=1.0f/(1.0f+activity/(float)w);if(d+1>=2&&threshold<=1.0f&&confidence>=threshold)break;}
-    for(size_t k=0;k<m->vocabulary;k++){float sum=0;for(size_t j=0;j<w;j++)sum+=(float)m->head[k*w+j]*s->fast[j];logits[k]=m->head_scale[k]*sum;}
-    free(next);free(proposal);return 1;
+    float*projected=s->input_projection,*candidate=s->scratch_proposal,*next=s->scratch_next;
+    if(!projected||!candidate||!next||!s->reasoning||s->steps>UINT_MAX-max_depth)return 0;
+    for(size_t i=0;i<w;i++){double value=0.0;for(size_t j=0;j<e;j++)value+=(double)m->wx_scale[i]*m->wx[i*e+j]*x[j];projected[i]=(float)value;}
+    for(size_t i=0;i<w;i++){double gate_logit=m->gate_bias[i];for(size_t j=0;j<w;j++)gate_logit+=(double)m->wh_scale[i]*m->wh[i*w+j]*projected[j];
+        float gate=gate_logit>=0.0?1.0f/(1.0f+expf(-(float)gate_logit)):expf((float)gate_logit)/(1.0f+expf((float)gate_logit));
+        candidate[i]=tanhf(projected[i]+m->bias[i]);next[i]=gate*s->fast[i]+candidate[i];}
+    memcpy(s->fast,next,w*sizeof(float));
+    for(size_t i=0;i<w;i++){double gate_logit=m->gate_bias[i];for(size_t j=0;j<w;j++)gate_logit+=(double)m->wh_scale[i]*m->wh[i*w+j]*projected[j];
+        float gate=gate_logit>=0.0?1.0f/(1.0f+expf(-(float)gate_logit)):expf((float)gate_logit)/(1.0f+expf((float)gate_logit));
+        s->slow[i]=gate*s->slow[i]+(1.0f-gate)*s->fast[i];projected[i]=s->fast[i]+s->slow[i];}
+    float*current=candidate,*following=next;memcpy(current,projected,w*sizeof(float));double previous_entropy=INFINITY;unsigned executed=0;
+    for(unsigned d=0;d<max_depth;d++){
+        for(size_t i=0;i<w;i++){double value=0.0;for(size_t j=0;j<w;j++)value+=(double)m->wu_scale[i]*m->wu[i*w+j]*current[j]+(double)m->wm_scale[i]*m->wm[i*w+j]*projected[j];following[i]=tanhf((float)value);}
+        for(size_t k=0;k<m->vocabulary;k++){double value=0.0;for(size_t j=0;j<w;j++)value+=(double)m->head_scale[k]*m->head[k*w+j]*following[j];logits[k]=(float)value;}
+        float maximum=logits[0];for(size_t k=1;k<m->vocabulary;k++)if(logits[k]>maximum)maximum=logits[k];
+        double sum=0.0;for(size_t k=0;k<m->vocabulary;k++)sum+=exp((double)logits[k]-(double)maximum);
+        if(!(sum>0.0)||!isfinite(sum))return 0;
+        double entropy=0.0;
+        for(size_t k=0;k<m->vocabulary;k++){double p=exp((double)logits[k]-(double)maximum)/sum;if(p>0.0)entropy-=p*log(p);}
+        executed=d+1;float*swap=current;current=following;following=swap;
+        if(d+1>=2&&previous_entropy-entropy<=threshold)break;
+        previous_entropy=entropy;
+    }
+    memcpy(s->reasoning,current,w*sizeof(float));s->steps+=executed;return 1;
 }
 int ama10_q8_step_features(const AMA10Q8Model*m,AMA10State*s,const float*x,float*z,unsigned depth,float threshold){return step(m,s,x,z,depth,threshold);}
 int ama10_q8_step(const AMA10Q8Model*m,AMA10State*s,uint32_t token,float*z,unsigned depth,float threshold){if(!m||token>=m->vocabulary)return 0;float*x=(float*)malloc(m->input_width*sizeof(float));if(!x)return 0;for(size_t j=0;j<m->input_width;j++)x[j]=m->embed_scale[j]*(float)m->embed[j*m->vocabulary+token];int ok=step(m,s,x,z,depth,threshold);free(x);return ok;}

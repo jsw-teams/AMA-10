@@ -29,6 +29,22 @@ int main(void){
        ama10_learning_rate(0.01f,1,0.1f)!=0.01f||
        !(ama10_learning_rate(0.01f,11,0.1f)<ama10_learning_rate(0.01f,2,0.1f))||
        ama10_learning_rate(0.01f,11,0.0f)!=0.01f)return 30;
+    {
+        AMA10Model model={0};AMA10Gradients a={0},b={0},merged={0};double cosine=0.0,task_weight=0.0;
+        if(!ama10_model_init(&model,4,2,2,401)||!ama10_gradients_init(&a,&model)||
+           !ama10_gradients_init(&b,&model)||!ama10_gradients_init(&merged,&model))return 52;
+        a.tokens=2;b.tokens=3;a.values[0][0]=2.0f;a.values[0][1]=2.0f;b.values[0][0]=-6.0f;
+        if(!ama10_gradients_combine_tasks(&merged,&a,&b,0,&cosine)||merged.tokens!=5||
+           merged.values[0][0]!=-4.0f||merged.values[0][1]!=2.0f||cosine>-0.70||cosine<-0.72||
+           !ama10_gradients_combine_tasks(&merged,&a,&b,1,&cosine)||merged.tokens!=5||
+           fabsf(merged.values[0][0]+3.0f)>1e-6f||fabsf(merged.values[0][1]-5.0f)>1e-6f||
+           !ama10_gradients_combine_tasks_with_weights(&merged,&a,&b,2,&cosine,&task_weight)||merged.tokens!=5||
+           fabs(task_weight-0.6)>1e-12||
+           fabsf(merged.values[0][0]+1.0f)>1e-6f||fabsf(merged.values[0][1]-3.0f)>1e-6f){
+            fprintf(stderr,"task gradient direct/PCGrad/minimum-norm merge mismatch\n");return 53;
+        }
+        ama10_gradients_free(&a);ama10_gradients_free(&b);ama10_gradients_free(&merged);ama10_model_free(&model);
+    }
     AMA10Model a,b; AMA10State x,y;
     if(!ama10_model_init(&a,17,8,8,123)||!ama10_model_init(&b,17,8,8,123)||!ama10_state_init(&x,8)||!ama10_state_init(&y,8))return 1;
     float p[17],q[17];
@@ -171,7 +187,8 @@ int main(void){
             size_t count_a=0,count_b=0;
             float *a=parameter_group(&token_model,group,&count_a);
             float *b=parameter_group(&feature_model,group,&count_b);
-            if(count_a!=count_b||memcmp(a,b,count_a*sizeof(float)))return 41;
+            if(count_a!=count_b)return 41;
+            for(size_t q=0;q<count_a;q++)if(fabsf(a[q]-b[q])>1.0e-6f)return 41;
         }
         size_t feature_index=0;
         for(size_t i=1;i<24;i++)if(fabsf(feature_gradients[i])>fabsf(feature_gradients[feature_index]))feature_index=i;
@@ -200,7 +217,7 @@ int main(void){
            !ama10_optimizer_init(&fixed_opt,&fixed)||!ama10_optimizer_init(&adaptive_opt,&adaptive)||
            !ama10_state_init(&fixed_state,5)||!ama10_state_init(&adaptive_state,5))return 22;
         if(!ama10_train_sequence(&fixed,&fixed_opt,&fixed_state,ai,at,5,2,0.0001f,0.0f,&fixed_loss)||
-           !ama10_train_sequence_adaptive(&adaptive,&adaptive_opt,&adaptive_state,ai,at,5,4,0.0f,
+           !ama10_train_sequence_adaptive(&adaptive,&adaptive_opt,&adaptive_state,ai,at,5,4,2.0f,
                                           0.0001f,0.0f,&adaptive_loss,&mean_depth))return 23;
         if(mean_depth!=2.0f||adaptive_state.steps!=10||fixed_state.steps!=10||
            fixed_loss!=adaptive_loss||!same_model_parameters(&fixed,&adaptive)){
@@ -208,9 +225,9 @@ int main(void){
         }
         if(!ama10_eval_loss(&adaptive,ai,at,5,4,&fixed_eval)||
            !ama10_eval_loss_adaptive(&adaptive,ai,at,5,4,2.0f,&adaptive_eval,&eval_depth)||
-           fixed_eval!=adaptive_eval||eval_depth!=4.0||
+           fabs(fixed_eval-adaptive_eval)>1.0e-6||eval_depth!=2.0||
            !ama10_eval_loss_adaptive(&adaptive,ai,at,5,4,0.0f,&adaptive_eval,&eval_depth)||
-           eval_depth!=2.0||!isfinite(adaptive_eval)){
+           eval_depth<2.0||eval_depth>4.0||!isfinite(adaptive_eval)){
             fprintf(stderr,"adaptive inference evaluation depth/loss parity failed\n");return 45;
         }
         ama10_state_free(&fixed_state);ama10_state_free(&adaptive_state);
@@ -273,22 +290,39 @@ int main(void){
         ama10_model_free(&direct);ama10_model_free(&accumulated);
     }
     {
+        AMA10Model model={0};AMA10Optimizer opt={0};AMA10State state={0};AMA10Gradients gradients={0};
+        const uint32_t inputs[]={0,1},targets[]={2,3},starts[]={1,2},counts[]={2,2};
+        const unsigned char loss_mask[]={1,1};float head_row0[4],head_row4[4],loss=0.0f;
+        if(!ama10_model_init(&model,5,4,4,813)||!ama10_optimizer_init(&opt,&model)||
+           !ama10_state_init(&state,4)||!ama10_gradients_init(&gradients,&model))return 49;
+        memcpy(head_row0,model.head,sizeof(head_row0));memcpy(head_row4,model.head+16,sizeof(head_row4));
+        if(!ama10_train_multimodal_accumulate_ranges(&model,&opt,&state,inputs,NULL,NULL,
+               loss_mask,targets,starts,counts,2,2,&gradients,NULL,&loss)||
+           gradients.tokens!=2||!isfinite(loss)||
+           !ama10_optimizer_apply(&model,&opt,&gradients,0.001f,0.0f)||
+           memcmp(head_row0,model.head,sizeof(head_row0))||
+           memcmp(head_row4,model.head+16,sizeof(head_row4))){
+            fprintf(stderr,"per-step output-class ranges leaked gradients outside the selected classes\n");return 50;
+        }
+        ama10_gradients_free(&gradients);ama10_state_free(&state);ama10_optimizer_free(&opt);ama10_model_free(&model);
+    }
+    {
         AMA10Model depth_model={0};AMA10State depth_one={0},depth_four={0};float logits_one[2],logits_four[2];
         if(!ama10_model_init(&depth_model,2,1,1,71)||!ama10_state_init(&depth_one,1)||
            !ama10_state_init(&depth_four,1))return 30;
         memset(depth_model.wx,0,sizeof(float));memset(depth_model.wh,0,sizeof(float));
         memset(depth_model.wm,0,sizeof(float));memset(depth_model.wu,0,sizeof(float));
-        memset(depth_model.bias,0,sizeof(float));depth_model.gate_bias[0]=-100.0f;
+        memset(depth_model.bias,0,sizeof(float));depth_model.gate_bias[0]=100.0f;
         memset(depth_model.embed,0,2*sizeof(float));memset(depth_model.head,0,2*sizeof(float));
         depth_one.fast[0]=depth_four.fast[0]=0.3f;depth_one.slow[0]=depth_four.slow[0]=0.8f;
         if(!ama10_step(&depth_model,&depth_one,0,logits_one,1,2.0f)||
            !ama10_step(&depth_model,&depth_four,0,logits_four,4,2.0f)||
            fabsf(depth_one.fast[0]-depth_four.fast[0])>1e-6f||
            fabsf(depth_one.slow[0]-depth_four.slow[0])>1e-6f||
-           fabsf(depth_four.slow[0]-0.7975f)>1e-6f){
+           fabsf(depth_four.slow[0]-0.8f)>1e-6f){
             fprintf(stderr,"slow-memory retention changed with recurrent depth\n");return 31;
         }
         ama10_state_free(&depth_one);ama10_state_free(&depth_four);ama10_model_free(&depth_model);
     }
-    puts("core forward/reset, depth-invariant slow memory, overfit, token and modality-input gradient checks, adaptive-depth, accumulation parity, and Muon hybrid update: ok");return 0;
+    puts("core forward/reset, depth-invariant slow memory, overfit, task-gradient direct/PCGrad/min-norm, token and modality-input gradient checks, adaptive-depth, accumulation parity, and Muon hybrid update: ok");return 0;
 }

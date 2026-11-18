@@ -40,8 +40,8 @@ static void parameter_views(const AMA10Model *m,float **p,size_t *n){
 static int write_payload(FILE *f,const AMA10Model *m,const AMA10Tokenizer *t,
                          const AMA10Optimizer *o,const AMA10State *s,
                          const AMA10CheckpointProgress *p){
-    static const unsigned char magic[8]={'A','M','A','1','0','C','K','7'};
-    int ok=fwrite(magic,1,8,f)==8&&write_u32(f,7)&&
+    static const unsigned char magic[8]={'A','M','A','1','0','C','K','8'};
+    int ok=fwrite(magic,1,8,f)==8&&write_u32(f,8)&&
         write_u32(f,(uint32_t)m->vocabulary)&&write_u32(f,(uint32_t)m->width)&&
         write_u32(f,(uint32_t)m->input_width)&&write_u32(f,(uint32_t)t->vocabulary_size)&&
         write_u32(f,p->sequence_length)&&write_u32(f,p->depth)&&
@@ -51,7 +51,8 @@ static int write_payload(FILE *f,const AMA10Model *m,const AMA10Tokenizer *t,
         write_u64(f,p->completed_updates)&&write_u64(f,p->cursor)&&write_u64(f,o->step)&&
         write_u32(f,o->algorithm)&&
         write_u32(f,p->target_vocabulary)&&write_f32(f,p->learning_rate)&&
-        write_f32(f,p->learning_rate_decay)&&write_f32(f,p->weight_decay);
+        write_f32(f,p->learning_rate_decay)&&write_f32(f,p->weight_decay)&&
+        write_u32(f,p->sampler_algorithm)&&write_u64(f,p->sampler_state);
     float *params[AMA10_PARAMETER_GROUPS];size_t sizes[AMA10_PARAMETER_GROUPS];parameter_views(m,params,sizes);
     for(size_t i=0;i<AMA10_PARAMETER_GROUPS&&ok;i++)ok=write_floats(f,params[i],sizes[i]);
     for(size_t i=256;i<t->vocabulary_size&&ok;i++){
@@ -72,6 +73,7 @@ int ama10_checkpoint_save(const char *path,const AMA10Model *m,const AMA10Tokeni
        m->width!=s->width||o->parameter_count!=AMA10_PARAMETER_GROUPS||
        (o->algorithm!=AMA10_OPT_ADAMW&&o->algorithm!=AMA10_OPT_MUON)||
        p->sequence_length==0||p->depth==0||p->accumulation_steps==0||p->tokenizer_sample_bytes==0||
+       p->sampler_algorithm>1||(p->sampler_algorithm==1&&!p->sampler_state)||
        p->target_vocabulary<t->vocabulary_size||
        !isfinite(p->learning_rate)||p->learning_rate<=0||
        !isfinite(p->learning_rate_decay)||p->learning_rate_decay<0||
@@ -105,7 +107,8 @@ static int read_payload(FILE *f,AMA10Model *m,AMA10Tokenizer *t,AMA10Optimizer *
     uint64_t completed=0,cursor=0,optimizer_step=0;
     AMA10CheckpointProgress progress={0};
     int ok=fread(magic,1,8,f)==8&&read_u32(f,&version)&&
-        ((version==6&&memcmp(magic,"AMA10CK6",8)==0)||(version==7&&memcmp(magic,"AMA10CK7",8)==0))&&
+        ((version==6&&memcmp(magic,"AMA10CK6",8)==0)||(version==7&&memcmp(magic,"AMA10CK7",8)==0)||
+         (version==8&&memcmp(magic,"AMA10CK8",8)==0))&&
         read_u32(f,&v)&&read_u32(f,&w)&&read_u32(f,&e)&&read_u32(f,&tv)&&
         read_u32(f,&seq)&&read_u32(f,&depth)&&read_u32(f,&accumulation)&&read_u32(f,&state_steps)&&
         read_u64(f,&progress.train_hash)&&read_u64(f,&progress.validation_hash)&&
@@ -114,7 +117,9 @@ static int read_payload(FILE *f,AMA10Model *m,AMA10Tokenizer *t,AMA10Optimizer *
         read_u32(f,&algorithm)&&
         read_u32(f,&target)&&read_f32(f,&progress.learning_rate)&&
         read_f32(f,&progress.learning_rate_decay)&&read_f32(f,&progress.weight_decay);
+    if(ok&&version>=8)ok=read_u32(f,&progress.sampler_algorithm)&&read_u64(f,&progress.sampler_state);
     if(!ok||!v||!w||!e||tv!=v||seq==0||depth==0||accumulation==0||
+       progress.sampler_algorithm>1||(progress.sampler_algorithm==1&&!progress.sampler_state)||
        progress.tokenizer_sample_bytes==0||target<tv||completed!=optimizer_step||
        !isfinite(progress.learning_rate)||
        progress.learning_rate<=0||!isfinite(progress.learning_rate_decay)||progress.learning_rate_decay<0||
@@ -127,7 +132,7 @@ static int read_payload(FILE *f,AMA10Model *m,AMA10Tokenizer *t,AMA10Optimizer *
     for(size_t k=0;k<AMA10_PARAMETER_GROUPS&&ok;k++)ok=read_floats(f,params[k],sizes[k]);
     for(uint32_t i=256;i<tv&&ok;i++){
         uint32_t special=0,left=0,right=0,length=0;
-        if((version==7&&!read_u32(f,&special))||!read_u32(f,&left)||!read_u32(f,&right)||!read_u32(f,&length)||
+        if((version>=7&&!read_u32(f,&special))||!read_u32(f,&left)||!read_u32(f,&right)||!read_u32(f,&length)||
            special>1||length==0||(special?(left!=UINT32_MAX||right!=UINT32_MAX):(left>=i||right>=i))){ok=0;break;}
         size_t ll=0,rl=0;if(!special){ll=t->tokens[left].length;rl=t->tokens[right].length;
             if(ll>SIZE_MAX-rl||ll+rl!=length){ok=0;break;}}

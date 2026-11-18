@@ -7,9 +7,10 @@
 
 typedef struct {
     uint32_t patch_width, patch_height, stride_width, stride_height;
-    uint32_t code_count, feature_width, levels, context_code_count;
+    uint32_t code_count, feature_width, latent_width, levels, context_code_count;
     uint64_t train_hash;
     float *centers, *residual_centers, *context_centers;
+    float *encoder, *encoder_bias, *decoder, *decoder_bias;
 } AMA10ImageCodebook;
 
 void ama10_image_codebook_free(AMA10ImageCodebook *book);
@@ -17,6 +18,12 @@ int ama10_image_codebook_fit(const float *patches, size_t patch_count,
                              size_t feature_width, uint32_t code_count,
                              uint32_t patch_width, uint32_t patch_height,
                              uint64_t train_hash, AMA10ImageCodebook *book);
+/* Fit the trainable spatial codec and latent-space codebook on the OpenCL GPU. */
+int ama10_image_codebook_fit_opencl(const float *patches,size_t patch_count,
+                             size_t feature_width,uint32_t code_count,
+                             uint32_t patch_width,uint32_t patch_height,
+                             uint64_t train_hash,const char *kernel_path,
+                             AMA10ImageCodebook *book);
 /* Add a second nearest-centroid stage fitted to the first-stage residuals. */
 int ama10_image_codebook_fit_residual(const float *patches,size_t patch_count,
                                       AMA10ImageCodebook *book);

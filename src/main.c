@@ -166,7 +166,7 @@ static int build_validation_prompt(const char *path,uint64_t file_bytes,
     return 1;
 }
 static int eval_dataset_region(const AMA10Model *m,AMA10TokenDataset *dataset,
-                               size_t count,double *loss){
+                               size_t count,unsigned depth,double *loss){
     if(!count||count==SIZE_MAX)return 0;
     uint32_t *window=(uint32_t*)malloc((count+1)*sizeof(uint32_t));
     uint32_t *in=(uint32_t*)malloc(count*sizeof(uint32_t));
@@ -174,7 +174,7 @@ static int eval_dataset_region(const AMA10Model *m,AMA10TokenDataset *dataset,
     if(!window||!in||!target){free(window);free(in);free(target);return 0;}
     int ok=ama10_token_dataset_read(dataset,0,count+1,window);
     if(ok){for(size_t i=0;i<count;i++){in[i]=window[i];target[i]=window[i+1];}
-        ok=ama10_eval_loss(m,in,target,count,2,loss);}
+        ok=ama10_eval_loss(m,in,target,count,depth,loss);}
     free(window);free(in);free(target);return ok;
 }
 static void print_generation_metrics(const AMA10Tokenizer *tokenizer,const uint32_t *tokens,
@@ -191,15 +191,53 @@ static void print_generation_metrics(const AMA10Tokenizer *tokenizer,const uint3
         (unsigned long long)metrics.cyrillic,(unsigned long long)metrics.arabic,
         (unsigned long long)metrics.devanagari,(unsigned long long)metrics.other);
 }
+#ifdef AMA10_ENABLE_OPENCL
+static int recommend_training_shape(size_t vocabulary,size_t maximum_sequence,unsigned depth,
+                                    size_t memory_budget,size_t *width,size_t *sequence,
+                                    size_t *selected_budget){
+    if(!vocabulary||maximum_sequence<2||!depth||!width||!sequence)return 0;
+    size_t best_width=0,best_sequence=0,budget=memory_budget;
+    long double best_compute=-1.0L;
+    for(size_t candidate=24;candidate<=maximum_sequence;){
+        size_t candidate_budget=memory_budget;
+        size_t candidate_width=ama10_opencl_recommend_width(vocabulary,candidate,depth,
+                                                             memory_budget,&candidate_budget);
+        if(candidate_width){
+            long double w=(long double)candidate_width,v=(long double)vocabulary;
+            long double compute=(long double)candidate*(4.0L*w*w+2.0L*v*w);
+            if(compute>best_compute||(compute==best_compute&&candidate>best_sequence)){
+                best_compute=compute;best_width=candidate_width;best_sequence=candidate;
+                budget=candidate_budget;
+            }
+        }
+        if(candidate>maximum_sequence/2)break;
+        candidate*=2;
+    }
+    if(!best_width)return 0;
+    *width=best_width;*sequence=best_sequence;
+    if(selected_budget)*selected_budget=budget;
+    return 1;
+}
+#endif
+static uint64_t training_rng_next(uint64_t *state){
+    uint64_t x=*state;
+    x^=x>>12;x^=x<<25;x^=x>>27;
+    if(!x)x=UINT64_C(0x9e3779b97f4a7c15);
+    *state=x;return x*UINT64_C(2685821657736338717);
+}
 static int train_file(const char *train_path,const char *validation_path,size_t updates,
                       float learning_rate,float learning_rate_decay,size_t target_vocab,size_t accumulation_steps,
                       uint32_t optimizer_algorithm,
+                      size_t bptt_depth,
                       uint64_t tokenizer_sample_limit,
                       const char *tokenizer_file,
                       const char *checkpoint,int resume,int opencl_adamw,size_t model_width,
-                      const char *metrics_csv){
+                      int automatic_width,size_t sequence_length,int automatic_sequence_length,
+                      int requested_sampler_algorithm,
+                      size_t gpu_memory_budget_bytes,const char *metrics_csv){
     unsigned char *sample=NULL,*generated_bytes=NULL;
     uint32_t *generated_ids=NULL;
+    uint32_t *training_window=NULL,*training_input=NULL,*training_target=NULL;
     size_t sample_bytes=0,generated_len=0,generated_count=0;
     uint64_t n=0,nval=0,train_tokens=0,val_tokens=0;
     AMA10Tokenizer tokenizer={0};
@@ -233,12 +271,20 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
         free(sample);sample=NULL;
     }
     tokenizer_seconds=native_wall_seconds()-phase_start;phase_start=native_wall_seconds();
+#ifdef AMA10_ENABLE_OPENCL
+    if((automatic_width||automatic_sequence_length)&&(resume||!opencl_adamw)){
+        fprintf(stderr,"automatic width/sequence selection requires a fresh --opencl-adamw run\n");goto fail;
+    }
+#else
+    if(automatic_width||automatic_sequence_length){fprintf(stderr,"automatic width/sequence selection requires an OpenCL-enabled build\n");goto fail;}
+    (void)gpu_memory_budget_bytes;
+#endif
     if(resume){
         if(!checkpoint||!ama10_checkpoint_load(checkpoint,&m,&tokenizer,&opt,&state,&progress)){
             fprintf(stderr,"training checkpoint could not be loaded\n");goto fail;
         }
         if(progress.train_hash!=train_hash||progress.validation_hash!=validation_hash||
-           progress.sequence_length!=24||progress.depth!=2||m.width!=model_width||
+            progress.sequence_length!=sequence_length||progress.depth!=bptt_depth||m.width!=model_width||
            progress.accumulation_steps!=accumulation_steps||progress.target_vocabulary!=target_vocab||
            progress.learning_rate!=learning_rate||progress.weight_decay!=0.01f||
            progress.tokenizer_sample_bytes!=tokenizer_sample_limit||
@@ -249,6 +295,16 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
             fprintf(stderr,"resume learning-rate schedule does not match checkpoint\n");goto fail;
         }
     }
+    int sampler_algorithm=requested_sampler_algorithm;
+    if(resume){
+        if(sampler_algorithm<0)sampler_algorithm=(int)progress.sampler_algorithm;
+        if(sampler_algorithm!=(int)progress.sampler_algorithm){
+            fprintf(stderr,"resume window-sampling mode does not match checkpoint\n");goto fail;
+        }
+    }else if(sampler_algorithm<0)sampler_algorithm=1;
+    uint64_t sampler_state=resume?progress.sampler_state:
+        (train_hash^validation_hash^UINT64_C(0x6a09e667f3bcc909));
+    if(!sampler_state)sampler_state=UINT64_C(0x9e3779b97f4a7c15);
     {
         uint64_t tok_hash=ama10_tokenizer_fingerprint(&tokenizer);
         char train_cache[160],validation_cache[160];
@@ -265,7 +321,35 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
     }
     cache_seconds=native_wall_seconds()-phase_start;phase_start=native_wall_seconds();
     if(train_tokens<64||val_tokens<2){fprintf(stderr,"tokenized train/validation text is too short\n");goto fail;}
-    const size_t width=model_width,seq=24,eval_n=512;
+#ifdef AMA10_ENABLE_OPENCL
+    if(automatic_sequence_length){
+        if(!recommend_training_shape(tokenizer.vocabulary_size,(size_t)(train_tokens-1),
+                                     (unsigned)bptt_depth,gpu_memory_budget_bytes,&model_width,
+                                     &sequence_length,&gpu_memory_budget_bytes)){
+            fprintf(stderr,"GPU budget could not fit an adaptive training shape\n");goto fail;
+        }
+        long double w=(long double)model_width;
+        long double parameters=4.0L*w*w+2.0L*(long double)tokenizer.vocabulary_size*w+2.0L*w;
+        printf("training_shape_selection=auto width=%zu sequence_length=%zu estimated_parameters=%.0Lf estimated_compute_per_update=%.0Lf memory_budget_bytes=%zu bptt_depth=%zu\n",
+            model_width,sequence_length,parameters,(long double)sequence_length*(4.0L*w*w+2.0L*(long double)tokenizer.vocabulary_size*w),gpu_memory_budget_bytes,bptt_depth);
+    }else if(automatic_width){
+        model_width=ama10_opencl_recommend_width(tokenizer.vocabulary_size,sequence_length,
+            (unsigned)bptt_depth,gpu_memory_budget_bytes,&gpu_memory_budget_bytes);
+        if(!model_width){fprintf(stderr,"GPU memory query could not find a valid training width\n");goto fail;}
+        long double w=(long double)model_width;
+        printf("model_width_selection=auto width=%zu estimated_parameters=%.0Lf memory_budget_bytes=%zu sequence_length=%zu bptt_depth=%zu\n",
+            model_width,4.0L*w*w+2.0L*(long double)tokenizer.vocabulary_size*w+2.0L*w,gpu_memory_budget_bytes,sequence_length,bptt_depth);
+    }
+#endif
+    if(!sequence_length||sequence_length>UINT32_MAX||sequence_length>=train_tokens||
+       sequence_length>SIZE_MAX/sizeof(uint32_t)-1){
+        fprintf(stderr,"selected sequence length is outside the available training stream or checkpoint format\n");goto fail;
+    }
+    const size_t width=model_width,seq=sequence_length,eval_n=512;
+    training_window=(uint32_t*)malloc((seq+1)*sizeof(uint32_t));
+    training_input=(uint32_t*)malloc(seq*sizeof(uint32_t));
+    training_target=(uint32_t*)malloc(seq*sizeof(uint32_t));
+    if(!training_window||!training_input||!training_target){fprintf(stderr,"training sequence buffers could not be allocated\n");goto fail;}
     if(!resume&&(!ama10_model_init(&m,tokenizer.vocabulary_size,width,width,UINT64_C(10))||
        !ama10_optimizer_init(&opt,&m)||!ama10_optimizer_set_algorithm(&opt,optimizer_algorithm)||
        !ama10_state_init(&state,width))){
@@ -282,8 +366,8 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
     size_t train_eval=train_tokens-1;if(train_eval>eval_n)train_eval=eval_n;
     size_t val_eval=val_tokens-1;if(val_eval>eval_n)val_eval=eval_n;
     double before_train,before_val,after_train,after_val;
-    if(!eval_dataset_region(&m,&train_dataset,train_eval,&before_train)||
-       !eval_dataset_region(&m,&validation_dataset,val_eval,&before_val)){
+    if(!eval_dataset_region(&m,&train_dataset,train_eval,(unsigned)bptt_depth,&before_train)||
+       !eval_dataset_region(&m,&validation_dataset,val_eval,(unsigned)bptt_depth,&before_val)){
         fprintf(stderr,"initial evaluation failed\n");goto fail;
     }
     setup_eval_seconds=native_wall_seconds()-phase_start;phase_start=native_wall_seconds();
@@ -300,36 +384,43 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
         }
     }
     uint64_t cursor=resume?progress.cursor:0;double running=0;
-    if(cursor>=train_tokens) { fprintf(stderr,"checkpoint data cursor is invalid\n");goto fail; }
+    if((sampler_algorithm==0&&cursor>=train_tokens)||
+       (sampler_algorithm==1&&resume&&!progress.sampler_state)){
+        fprintf(stderr,"checkpoint data cursor or random sampler state is invalid\n");goto fail;
+    }
     if(resume&&(uint64_t)updates<start_update){fprintf(stderr,"requested total updates precede checkpoint\n");goto fail;}
-    if(resume) printf("resuming_at_update=%llu cursor=%zu optimizer_step=%llu\n",
-        (unsigned long long)progress.completed_updates,cursor,(unsigned long long)opt.step);
+    if(resume) printf("resuming_at_update=%llu cursor=%zu optimizer_step=%llu sampler=%s sampler_state=%llu\n",
+        (unsigned long long)progress.completed_updates,cursor,(unsigned long long)opt.step,
+        sampler_algorithm==1?"random-window":"stream",(unsigned long long)sampler_state);
     for(uint64_t step=resume?progress.completed_updates:0;step<(uint64_t)updates;step++){
         float update_loss=0.0f;
         float effective_lr=ama10_learning_rate(learning_rate,step+1,learning_rate_decay);
         if(!(effective_lr>0.0f)){fprintf(stderr,"learning-rate schedule produced an invalid rate\n");goto fail;}
         for(size_t micro=0;micro<accumulation_steps;micro++){
-            if(cursor+seq>=train_tokens){cursor=0;ama10_state_reset(&state);}
-            uint32_t window[seq+1],in[seq],target[seq];
-            if(!ama10_token_dataset_read(&train_dataset,cursor,seq+1,window)){
+            if(sampler_algorithm==1){
+                sampler_state=training_rng_next(&sampler_state);
+                cursor=sampler_state%(train_tokens-seq);
+                ama10_state_reset(&state);
+            }else if(cursor+seq>=train_tokens){cursor=0;ama10_state_reset(&state);}
+            if(!ama10_token_dataset_read(&train_dataset,cursor,seq+1,training_window)){
                 fprintf(stderr,"training token window read failed at cursor %llu\n",(unsigned long long)cursor);goto fail;
             }
-            for(size_t j=0;j<seq;j++){in[j]=window[j];target[j]=window[j+1];}
+            for(size_t j=0;j<seq;j++){training_input[j]=training_window[j];training_target[j]=training_window[j+1];}
             float micro_loss=0.0f;
             int trained;
 #ifdef AMA10_ENABLE_OPENCL
-            if(opencl_adamw)trained=ama10_train_sequence_accumulate_opencl(&m,&opt,&state,in,target,seq,2,
+            if(opencl_adamw)trained=ama10_train_sequence_accumulate_opencl(&m,&opt,&state,training_input,training_target,seq,(unsigned)bptt_depth,
                                                                            &gradients,update_backend,&micro_loss);
             else
 #endif
             trained=accumulation_steps==1&&optimizer_algorithm==AMA10_OPT_ADAMW?
-                ama10_train_sequence(&m,&opt,&state,in,target,seq,2,effective_lr,0.01f,&micro_loss):
-                ama10_train_sequence_accumulate(&m,&opt,&state,in,target,seq,2,&gradients,&micro_loss);
+                ama10_train_sequence(&m,&opt,&state,training_input,training_target,seq,(unsigned)bptt_depth,effective_lr,0.01f,&micro_loss):
+                ama10_train_sequence_accumulate(&m,&opt,&state,training_input,training_target,seq,(unsigned)bptt_depth,&gradients,&micro_loss);
             if(!trained){
                 fprintf(stderr,"training failed at update %llu microbatch %zu\n",
                         (unsigned long long)(step+1),micro);goto fail;
             }
-            update_loss+=micro_loss;cursor+=seq;
+            update_loss+=micro_loss;if(sampler_algorithm==0)cursor+=seq;
         }
         int update_ok=1;
         if(accumulation_steps>1||optimizer_algorithm==AMA10_OPT_MUON||opencl_adamw){
@@ -352,8 +443,9 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
         if((completed%100==0||completed==(uint64_t)updates)&&checkpoint){
             progress.completed_updates=completed;progress.cursor=cursor;
             progress.train_hash=train_hash;progress.validation_hash=validation_hash;
+            progress.sampler_algorithm=(uint32_t)sampler_algorithm;progress.sampler_state=sampler_state;
             progress.tokenizer_sample_bytes=tokenizer_sample_limit;
-            progress.sequence_length=(uint32_t)seq;progress.depth=2;
+            progress.sequence_length=(uint32_t)seq;progress.depth=(uint32_t)bptt_depth;
             progress.accumulation_steps=(uint32_t)accumulation_steps;
             progress.target_vocabulary=(uint32_t)target_vocab;
             progress.optimizer_algorithm=optimizer_algorithm;
@@ -380,18 +472,18 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
 #ifdef AMA10_ENABLE_OPENCL
     if(opencl_adamw&&!ama10_opencl_adamw_sync(update_backend,&m,&opt)){fprintf(stderr,"OpenCL optimizer moment synchronization failed\n");goto fail;}
 #endif
-    if(!eval_dataset_region(&m,&train_dataset,train_eval,&after_train)||
-       !eval_dataset_region(&m,&validation_dataset,val_eval,&after_val)){
+    if(!eval_dataset_region(&m,&train_dataset,train_eval,(unsigned)bptt_depth,&after_train)||
+       !eval_dataset_region(&m,&validation_dataset,val_eval,(unsigned)bptt_depth,&after_val)){
         fprintf(stderr,"final evaluation failed\n");goto fail;
     }
     final_eval_seconds=native_wall_seconds()-phase_start;phase_start=native_wall_seconds();
-    printf("train_bytes=%llu validation_bytes=%llu train_tokens=%llu validation_tokens=%llu tokenizer_sample_budget_bytes=%llu vocabulary=%zu updates=%zu depth=2 width=%zu accumulation=%zu optimizer=%s seed=10 learning_rate=%.7g inverse_sqrt_decay=%.7g\n",
+    printf("train_bytes=%llu validation_bytes=%llu train_tokens=%llu validation_tokens=%llu tokenizer_sample_budget_bytes=%llu vocabulary=%zu updates=%zu depth=%zu width=%zu sequence_length=%zu sampler=%s accumulation=%zu optimizer=%s seed=10 learning_rate=%.7g inverse_sqrt_decay=%.7g\n",
            (unsigned long long)n,(unsigned long long)nval,(unsigned long long)train_tokens,
            (unsigned long long)val_tokens,(unsigned long long)tokenizer_sample_limit,
-           tokenizer.vocabulary_size,updates,width,accumulation_steps,
+            tokenizer.vocabulary_size,updates,bptt_depth,width,seq,sampler_algorithm==1?"random-window":"stream",accumulation_steps,
            optimizer_algorithm==AMA10_OPT_MUON?"muon-hybrid":opencl_adamw?"adamw-opencl-hybrid":"adamw",learning_rate,learning_rate_decay);
 #ifdef AMA10_ENABLE_OPENCL
-    if(opencl_adamw)printf("training_compute=opencl_recurrent_forward_output_head_bptt_adamw+cpu_loss_orchestration device=%s\n",ama10_opencl_device_name(update_backend));
+    if(opencl_adamw)printf("training_compute=opencl_batched_projection_gate_affine_scan_fixed_reasoner_output_head_reasoner_and_affine_backward_adamw+cpu_loss_embedding_scatter device=%s\n",ama10_opencl_device_name(update_backend));
 #endif
     if(optimizer_algorithm==AMA10_OPT_MUON)
         printf("muon_hidden_lr=%.7g auxiliary_adamw_lr=%.7g momentum=0.95 nesterov=true newton_schulz_steps=5\n",
@@ -408,8 +500,9 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
     if(checkpoint&&progress.completed_updates!=(uint64_t)updates){
         progress.completed_updates=(uint64_t)updates;progress.cursor=cursor;
         progress.train_hash=train_hash;progress.validation_hash=validation_hash;
+        progress.sampler_algorithm=(uint32_t)sampler_algorithm;progress.sampler_state=sampler_state;
         progress.tokenizer_sample_bytes=tokenizer_sample_limit;
-        progress.sequence_length=(uint32_t)seq;progress.depth=2;
+        progress.sequence_length=(uint32_t)seq;progress.depth=(uint32_t)bptt_depth;
         progress.accumulation_steps=(uint32_t)accumulation_steps;
         progress.target_vocabulary=(uint32_t)target_vocab;
         progress.optimizer_algorithm=optimizer_algorithm;
@@ -490,7 +583,7 @@ static int train_file(const char *train_path,const char *validation_path,size_t 
     ama10_token_dataset_close(&train_dataset);
     ama10_token_dataset_close(&validation_dataset);ama10_state_free(&state);ama10_optimizer_free(&opt);
     ama10_model_free(&m);ama10_tokenizer_free(&tokenizer);
-    free(sample);free(generated_ids);free(generated_bytes);return 0;
+    free(training_window);free(training_input);free(training_target);free(sample);free(generated_ids);free(generated_bytes);return 0;
 fail:
     if(metrics_file)fclose(metrics_file);
     ama10_gradients_free(&gradients);
@@ -500,7 +593,7 @@ fail:
     ama10_token_dataset_close(&train_dataset);
     ama10_token_dataset_close(&validation_dataset);ama10_state_free(&state);ama10_optimizer_free(&opt);
     ama10_model_free(&m);ama10_tokenizer_free(&tokenizer);
-    free(sample);free(generated_ids);free(generated_bytes);return 1;
+    free(training_window);free(training_input);free(training_target);free(sample);free(generated_ids);free(generated_bytes);return 1;
 }
 static int generate_file(const char *model_path,const char *tokenizer_path,const char *prompt_path,
                          const char *output_path,size_t max_tokens,int use_opencl,
@@ -515,6 +608,7 @@ static int generate_file(const char *model_path,const char *tokenizer_path,const
     uint32_t *prompt_ids=NULL,*output_ids=NULL;size_t prompt_count=0;
     float *logits=NULL;size_t *frequency=NULL;int rc=1;
     int bundled=ama10_checkpoint_load(model_path,&m,&tokenizer,&optimizer,&state,&checkpoint_progress);
+    unsigned compute_depth=bundled&&checkpoint_progress.depth?checkpoint_progress.depth:2;
     if(bundled){
         AMA10Tokenizer sidecar={0};
         if(!ama10_tokenizer_load(&sidecar,tokenizer_path)||
@@ -552,13 +646,13 @@ static int generate_file(const char *model_path,const char *tokenizer_path,const
     frequency=(size_t*)calloc(m.vocabulary,sizeof(size_t));
     if(!logits||!output_ids||!frequency){fprintf(stderr,"generation allocation failed\n");goto done;}
     for(size_t i=0;i<prompt_count;i++)if(adapter_path){
-        if(!ama10_step_hidden(&m,&state,prompt_ids[i],logits,hidden,2,2.0f))goto done;
+        if(!ama10_step_hidden(&m,&state,prompt_ids[i],logits,hidden,compute_depth,2.0f))goto done;
         ama10_lora_apply(&adapter,hidden,logits);
     }else if(
 #ifdef AMA10_ENABLE_OPENCL
-        (opencl?ama10_opencl_step_stream(opencl,prompt_ids[i],logits,2,2.0f):
+        (opencl?ama10_opencl_step_stream(opencl,prompt_ids[i],logits,compute_depth,2.0f):
 #endif
-        ama10_step(&m,&state,prompt_ids[i],logits,2,2.0f)
+        ama10_step(&m,&state,prompt_ids[i],logits,compute_depth,2.0f)
 #ifdef AMA10_ENABLE_OPENCL
         )
 #endif
@@ -583,13 +677,13 @@ static int generate_file(const char *model_path,const char *tokenizer_path,const
             fprintf(stderr,"UTF-8 decoder state failed at token %zu\n",count);goto done;
         }
         if(adapter_path){
-            if(!ama10_step_hidden(&m,&state,(uint32_t)best,logits,hidden,2,2.0f)){fprintf(stderr,"decode failed at token %zu\n",count);goto done;}
+            if(!ama10_step_hidden(&m,&state,(uint32_t)best,logits,hidden,compute_depth,2.0f)){fprintf(stderr,"decode failed at token %zu\n",count);goto done;}
             ama10_lora_apply(&adapter,hidden,logits);
         }else if(
 #ifdef AMA10_ENABLE_OPENCL
-           (opencl?ama10_opencl_step_stream(opencl,(uint32_t)best,logits,2,2.0f):
+           (opencl?ama10_opencl_step_stream(opencl,(uint32_t)best,logits,compute_depth,2.0f):
 #endif
-           ama10_step(&m,&state,(uint32_t)best,logits,2,2.0f)
+           ama10_step(&m,&state,(uint32_t)best,logits,compute_depth,2.0f)
 #ifdef AMA10_ENABLE_OPENCL
            )
 #endif
@@ -671,6 +765,7 @@ static int evaluate_file(const char *model_path,const char *tokenizer_path,const
     uint64_t data_hash=0,raw_bytes=0;
     if(!ama10_file_fingerprint(data_path,&data_hash,&raw_bytes)||!raw_bytes)goto done;
     int bundled=ama10_checkpoint_load(model_path,&model,&tokenizer,&optimizer,&state,&progress);
+    unsigned fixed_depth=bundled&&progress.depth?progress.depth:2;
     if(bundled){
         optimizer_algorithm=optimizer.algorithm;
         AMA10Tokenizer sidecar={0};
@@ -693,7 +788,7 @@ static int evaluate_file(const char *model_path,const char *tokenizer_path,const
         size_t count=(size_t)((dataset.token_count-1-cursor)>512?512:(dataset.token_count-1-cursor));
         if(!ama10_token_dataset_read(&dataset,cursor,count+1,window)){free(logits);goto done;}
         for(size_t i=0;i<count;i++){
-            if(!ama10_step(&model,&state,window[i],logits,2,2.0f)){free(logits);goto done;}
+            if(!ama10_step(&model,&state,window[i],logits,fixed_depth,2.0f)){free(logits);goto done;}
             float maximum=-INFINITY;
             for(size_t j=0;j<model.vocabulary;j++)if(logits[j]>maximum)maximum=logits[j];
             if(window[i+1]>=model.vocabulary||!isfinite(maximum)){free(logits);goto done;}
@@ -709,21 +804,21 @@ static int evaluate_file(const char *model_path,const char *tokenizer_path,const
     free(logits);
     if(predictions+1!=dataset.token_count)goto done;
     double nats_per_byte=total_loss/(double)raw_bytes;
-    printf("eval_bytes=%llu eval_tokens=%llu predictions=%llu token_nll=%.8f nats_per_byte=%.8f bits_per_byte=%.8f checkpoint_updates=%llu optimizer=%s\n",
+    printf("eval_bytes=%llu eval_tokens=%llu predictions=%llu token_nll=%.8f nats_per_byte=%.8f bits_per_byte=%.8f checkpoint_updates=%llu recurrent_depth=%u optimizer=%s\n",
         (unsigned long long)raw_bytes,(unsigned long long)dataset.token_count,
         (unsigned long long)predictions,total_loss/(double)predictions,nats_per_byte,nats_per_byte/0.6931471805599453,
-        (unsigned long long)progress.completed_updates,
+        (unsigned long long)progress.completed_updates,fixed_depth,
         bundled?(optimizer_algorithm==AMA10_OPT_MUON?"muon-hybrid":"adamw"):"weights-only");
     if(reset_period){double reset_loss=0,reset_depth=0,reset_seconds=-1.0;
-        if(!evaluate_adaptive_dataset(&model,&dataset,2,2.0f,reset_period,&reset_loss,&reset_depth,&reset_seconds))goto done;
-        printf("state_reset_period=%zu state_reset_fixed_depth=2 state_reset_token_nll=%.8f state_reset_mean_depth=%.6f state_reset_cpu_seconds=%.6f\n",
-            reset_period,reset_loss,reset_depth,reset_seconds);
+        if(!evaluate_adaptive_dataset(&model,&dataset,fixed_depth,2.0f,reset_period,&reset_loss,&reset_depth,&reset_seconds))goto done;
+        printf("state_reset_period=%zu state_reset_fixed_depth=%u state_reset_token_nll=%.8f state_reset_mean_depth=%.6f state_reset_cpu_seconds=%.6f\n",
+            reset_period,fixed_depth,reset_loss,reset_depth,reset_seconds);
     }
     if(adaptive_depth){double adaptive_loss=0,mean_depth=0,fixed_max_loss=0,fixed_max_depth=0;
         double adaptive_seconds=-1.0,fixed_max_seconds=-1.0;
         if(!evaluate_adaptive_dataset(&model,&dataset,adaptive_depth,2.0f,0,&fixed_max_loss,&fixed_max_depth,&fixed_max_seconds)||
            !evaluate_adaptive_dataset(&model,&dataset,adaptive_depth,halt_threshold,0,&adaptive_loss,&mean_depth,&adaptive_seconds))goto done;
-        printf("fixed_two_step_cpu_seconds=%.6f fixed_max_depth=%u fixed_max_depth_token_nll=%.8f fixed_mean_depth=%.6f fixed_max_depth_cpu_seconds=%.6f\n",
+        printf("checkpoint_depth_cpu_seconds=%.6f fixed_max_depth=%u fixed_max_depth_token_nll=%.8f fixed_mean_depth=%.6f fixed_max_depth_cpu_seconds=%.6f\n",
             fixed_seconds,adaptive_depth,fixed_max_loss,fixed_max_depth,fixed_max_seconds);
         printf("adaptive_max_depth=%u halt_threshold=%.6f adaptive_token_nll=%.8f adaptive_mean_depth=%.6f adaptive_cpu_seconds=%.6f\n",
             adaptive_depth,halt_threshold,adaptive_loss,mean_depth,adaptive_seconds);
@@ -933,7 +1028,7 @@ done:
     return ok?0:1;
 }
 static void usage(const char *exe){
-    fprintf(stderr,"usage:\n  %s train <train-utf8-file> <validation-utf8-file> [total-updates=1000] [learning-rate=0.001] [vocabulary=512] [checkpoint-path] [--width N] [--accumulation N] [--lr-decay D] [--optimizer adamw|muon] [--tokenizer-sample-bytes N] [--tokenizer-file path] [--metrics-csv path] [--resume] [--opencl-adamw]\n  %s generate <model> <tokenizer> <prompt-file> <output-file> [tokens=128] [cpu|opencl] [repetition-penalty=0] [adapter.lora]\n  %s export-safetensors <checkpoint-or-model.safetensors> <output.safetensors>\n  %s evaluate <checkpoint-or-model> <tokenizer> <utf8-data-file> [adaptive-max-depth halt-threshold] [state-reset-period]\n      or: evaluate <checkpoint-or-model> <tokenizer> <utf8-data-file> <state-reset-period>\n  %s evaluate-documents <checkpoint-or-model> <tokenizer> <form-feed-separated-documents.txt>\n  %s profile <tokenizer> <utf8-data-file>\n  %s grow-vocabulary <checkpoint> <tokenizer> <training-file> <target-vocabulary> <output-checkpoint>\n",exe,exe,exe,exe,exe,exe,exe);
+    fprintf(stderr,"usage:\n  %s train <train-utf8-file> <validation-utf8-file> [total-updates=1000] [learning-rate=0.001] [vocabulary=512] [checkpoint-path] [--width N|auto] [--sequence-length N|auto] [--window-sampling random|stream] [--gpu-memory-budget-mb N] [--accumulation N] [--bptt-depth N] [--lr-decay D] [--optimizer adamw|muon] [--tokenizer-sample-bytes N] [--tokenizer-file path] [--metrics-csv path] [--resume] [--opencl-adamw]\n  %s generate <model> <tokenizer> <prompt-file> <output-file> [tokens=128] [cpu|opencl] [repetition-penalty=0] [adapter.lora]\n  %s export-safetensors <checkpoint-or-model.safetensors> <output.safetensors>\n  %s evaluate <checkpoint-or-model> <tokenizer> <utf8-data-file> [adaptive-max-depth halt-threshold] [state-reset-period]\n      or: evaluate <checkpoint-or-model> <tokenizer> <utf8-data-file> <state-reset-period>\n  %s evaluate-documents <checkpoint-or-model> <tokenizer> <form-feed-separated-documents.txt>\n  %s profile <tokenizer> <utf8-data-file>\n  %s grow-vocabulary <checkpoint> <tokenizer> <training-file> <target-vocabulary> <output-checkpoint>\n",exe,exe,exe,exe,exe,exe,exe);
 }
 static int export_safetensors(const char *source,const char *destination){
     AMA10Model model={0};AMA10Tokenizer tokenizer={0};AMA10Optimizer optimizer={0};AMA10State state={0};
@@ -994,7 +1089,7 @@ int main(int argc,char **argv){
             }}
         return generate_file(argv[2],argv[3],argv[4],argv[5],count,use_opencl,repetition_penalty,argc==10?argv[9]:NULL);
     }
-    if(strcmp(argv[1],"train")!=0||argc<4||argc>24){usage(argv[0]);return 2;}
+    if(strcmp(argv[1],"train")!=0||argc<4){usage(argv[0]);return 2;}
     size_t updates=1000;
     if(argc>=5){char *end=NULL;errno=0;unsigned long long x=strtoull(argv[4],&end,10);
         if(errno||!end||*end||x==0||x>SIZE_MAX){fprintf(stderr,"invalid update count\n");return 2;}updates=(size_t)x;}
@@ -1004,19 +1099,43 @@ int main(int argc,char **argv){
     size_t vocab=512;
     if(argc>=7){char *end=NULL;errno=0;unsigned long long x=strtoull(argv[6],&end,10);
         if(errno||!end||*end||x<256||x>UINT32_MAX||x>SIZE_MAX){fprintf(stderr,"invalid tokenizer vocabulary size\n");return 2;}vocab=(size_t)x;}
-    size_t accumulation=1,model_width=32;float lr_decay=0.0f;uint64_t tokenizer_sample=UINT64_C(8)*1024u*1024u;
-    int resume=0,opencl_adamw=0,have_width=0,have_accumulation=0,have_lr_decay=0,have_tokenizer_sample=0,have_optimizer=0;
+    size_t accumulation=1,model_width=32,bptt_depth=2,sequence_length=24,gpu_memory_budget_bytes=0;float lr_decay=0.0f;uint64_t tokenizer_sample=UINT64_C(8)*1024u*1024u;
+    int resume=0,opencl_adamw=0,have_width=0,have_accumulation=0,have_bptt_depth=0,have_lr_decay=0,have_tokenizer_sample=0,have_optimizer=0;
+    int automatic_width=0,automatic_sequence_length=0,have_sequence_length=0,have_gpu_memory_budget=0;
+    int requested_sampler_algorithm=-1,have_sampler_algorithm=0;
     int have_tokenizer_file=0;const char *tokenizer_file=NULL,*metrics_csv=NULL;
     uint32_t optimizer_algorithm=AMA10_OPT_ADAMW;
     for(int i=8;i<argc;i++){
         if(strcmp(argv[i],"--resume")==0){if(resume){fprintf(stderr,"duplicate --resume\n");return 2;}resume=1;}
         else if(strcmp(argv[i],"--opencl-adamw")==0){if(opencl_adamw){fprintf(stderr,"duplicate --opencl-adamw\n");return 2;}opencl_adamw=1;}
-        else if(strcmp(argv[i],"--width")==0){if(have_width||i+1>=argc){fprintf(stderr,"invalid --width option\n");return 2;}char *end=NULL;errno=0;unsigned long long x=strtoull(argv[++i],&end,10);if(errno||!end||*end||x<8||x>4096){fprintf(stderr,"model width must be between 8 and 4096\n");return 2;}model_width=(size_t)x;have_width=1;}
+        else if(strcmp(argv[i],"--width")==0){if(have_width||i+1>=argc){fprintf(stderr,"invalid --width option\n");return 2;}const char *value=argv[++i];if(strcmp(value,"auto")==0){automatic_width=1;model_width=0;}else{char *end=NULL;errno=0;unsigned long long x=strtoull(value,&end,10);if(errno||!end||*end||!x||x>SIZE_MAX){fprintf(stderr,"invalid model width\n");return 2;}model_width=(size_t)x;}have_width=1;}
+        else if(strcmp(argv[i],"--gpu-memory-budget-mb")==0){if(have_gpu_memory_budget||i+1>=argc){fprintf(stderr,"invalid --gpu-memory-budget-mb option\n");return 2;}char *end=NULL;errno=0;unsigned long long mb=strtoull(argv[++i],&end,10);const size_t multiplier=(size_t)1024u*1024u;if(errno||!end||*end||!mb||mb>SIZE_MAX/multiplier){fprintf(stderr,"invalid GPU memory budget\n");return 2;}gpu_memory_budget_bytes=(size_t)mb*multiplier;have_gpu_memory_budget=1;}
         else if(strcmp(argv[i],"--accumulation")==0){
             if(have_accumulation||i+1>=argc){fprintf(stderr,"invalid --accumulation option\n");return 2;}
             char *end=NULL;errno=0;unsigned long long x=strtoull(argv[++i],&end,10);
             if(errno||!end||*end||x==0||x>UINT32_MAX||x>SIZE_MAX){fprintf(stderr,"invalid accumulation count\n");return 2;}
             accumulation=(size_t)x;have_accumulation=1;
+        }
+        else if(strcmp(argv[i],"--bptt-depth")==0){
+            if(have_bptt_depth||i+1>=argc){fprintf(stderr,"invalid --bptt-depth option\n");return 2;}
+            char *end=NULL;errno=0;unsigned long long x=strtoull(argv[++i],&end,10);
+            if(errno||!end||*end||x==0||x>UINT32_MAX||x>SIZE_MAX){fprintf(stderr,"invalid BPTT depth\n");return 2;}
+            bptt_depth=(size_t)x;have_bptt_depth=1;
+        }
+        else if(strcmp(argv[i],"--sequence-length")==0){
+            if(have_sequence_length||i+1>=argc){fprintf(stderr,"invalid --sequence-length option\n");return 2;}
+            const char *value=argv[++i];have_sequence_length=1;
+            if(strcmp(value,"auto")==0)automatic_sequence_length=1;
+            else{char *end=NULL;errno=0;unsigned long long x=strtoull(value,&end,10);
+                if(errno||!end||*end||!x||x>UINT32_MAX||x>SIZE_MAX){fprintf(stderr,"invalid sequence length\n");return 2;}
+                sequence_length=(size_t)x;}
+        }
+        else if(strcmp(argv[i],"--window-sampling")==0){
+            if(have_sampler_algorithm||i+1>=argc){fprintf(stderr,"invalid --window-sampling option\n");return 2;}
+            const char *mode=argv[++i];have_sampler_algorithm=1;
+            if(strcmp(mode,"random")==0)requested_sampler_algorithm=1;
+            else if(strcmp(mode,"stream")==0)requested_sampler_algorithm=0;
+            else{fprintf(stderr,"window sampling must be random or stream\n");return 2;}
         }
         else if(strcmp(argv[i],"--lr-decay")==0){
             if(have_lr_decay||i+1>=argc){fprintf(stderr,"invalid --lr-decay option\n");return 2;}
@@ -1044,9 +1163,15 @@ int main(int argc,char **argv){
         }else{fprintf(stderr,"unknown training option: %s\n",argv[i]);return 2;}
     }
     if(opencl_adamw&&optimizer_algorithm!=AMA10_OPT_ADAMW){fprintf(stderr,"--opencl-adamw currently supports AdamW only\n");return 2;}
+    if(automatic_width&&resume){fprintf(stderr,"--width auto cannot resume a fixed-width checkpoint\n");return 2;}
+    if(automatic_width&&!have_sequence_length)automatic_sequence_length=1;
+    if(automatic_sequence_length&&!automatic_width){fprintf(stderr,"--sequence-length auto requires --width auto\n");return 2;}
+    if(automatic_sequence_length&&resume){fprintf(stderr,"automatic sequence length cannot resume a fixed-shape checkpoint\n");return 2;}
     if(resume&&argc<8){fprintf(stderr,"resume requires a checkpoint path\n");return 2;}
     if(resume&&tokenizer_file){fprintf(stderr,"--tokenizer-file cannot be used with --resume\n");return 2;}
-    return train_file(argv[2],argv[3],updates,lr,lr_decay,vocab,accumulation,optimizer_algorithm,tokenizer_sample,
+    return train_file(argv[2],argv[3],updates,lr,lr_decay,vocab,accumulation,optimizer_algorithm,bptt_depth,tokenizer_sample,
                       tokenizer_file,
-                      argc>=8?argv[7]:NULL,resume,opencl_adamw,model_width,metrics_csv);
+                      argc>=8?argv[7]:NULL,resume,opencl_adamw,model_width,
+                      automatic_width,sequence_length,automatic_sequence_length,
+                      requested_sampler_algorithm,gpu_memory_budget_bytes,metrics_csv);
 }

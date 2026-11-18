@@ -15,9 +15,11 @@ typedef struct {
     uint32_t accumulation_steps;
     uint32_t target_vocabulary;
     uint32_t optimizer_algorithm;
+    uint32_t sampler_algorithm;
     float learning_rate;
     float learning_rate_decay;
     float weight_decay;
+    uint64_t sampler_state;
 } AMA10CheckpointProgress;
 
 /* Destinations must be zero-initialized before load. Checkpoints replace atomically. */
